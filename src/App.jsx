@@ -282,23 +282,25 @@ function RepeatPicker({ value, onChange, theme }) {
   ];
 
   const current = value?.type || null;
-  const [daysVal, setDaysVal] = useState(value?.days || 2);
-  const [domVal,  setDomVal]  = useState(value?.dayOfMonth || 1);
+  const [daysVal, setDaysVal] = useState(String(value?.days || 2));
+  const [domVal,  setDomVal]  = useState(String(value?.dayOfMonth || 1));
 
   const select = (key) => {
     if (current === key) { onChange(null); return; }
-    if (key === "days")          onChange({ type: key, days: daysVal });
-    else if (key === "monthly-fixed") onChange({ type: key, dayOfMonth: domVal });
-    else                         onChange({ type: key });
+    if (key === "days")               onChange({ type: key, days: parseInt(daysVal,10) || 2 });
+    else if (key === "monthly-fixed") onChange({ type: key, dayOfMonth: parseInt(domVal,10) || 1 });
+    else                              onChange({ type: key });
   };
 
   const updateDays = (v) => {
     setDaysVal(v);
-    if (current === "days") onChange({ type: "days", days: v });
+    const n = parseInt(v, 10);
+    if (!isNaN(n) && n >= 1 && current === "days") onChange({ type: "days", days: n });
   };
   const updateDom = (v) => {
     setDomVal(v);
-    if (current === "monthly-fixed") onChange({ type: "monthly-fixed", dayOfMonth: v });
+    const n = parseInt(v, 10);
+    if (!isNaN(n) && n >= 1 && current === "monthly-fixed") onChange({ type: "monthly-fixed", dayOfMonth: n });
   };
 
   return (
@@ -319,16 +321,20 @@ function RepeatPicker({ value, onChange, theme }) {
       {current === "days" && (
         <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
           <span style={{ fontSize:12, color: t.sub }}>間隔:</span>
-          <input type="number" min={1} max={365} value={daysVal} onChange={e => updateDays(Number(e.target.value))}
-            style={{ width:60, background: t.inputBg, border:`1px solid ${t.inputBorder}`, borderRadius:8, padding:"4px 8px", color: t.text, fontSize:13, outline:"none" }}/>
+          <input type="text" inputMode="numeric" pattern="[0-9]*" value={daysVal}
+            onChange={e => updateDays(e.target.value)}
+            onBlur={e => { const n = parseInt(e.target.value,10); if (isNaN(n)||n<1) setDaysVal("1"); }}
+            style={{ width:60, background: t.inputBg, border:`1px solid ${t.inputBorder}`, borderRadius:8, padding:"4px 8px", color: t.text, fontSize:13, outline:"none", textAlign:"center" }}/>
           <span style={{ fontSize:12, color: t.sub }}>日</span>
         </div>
       )}
       {current === "monthly-fixed" && (
         <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
           <span style={{ fontSize:12, color: t.sub }}>日付:</span>
-          <input type="number" min={1} max={31} value={domVal} onChange={e => updateDom(Number(e.target.value))}
-            style={{ width:60, background: t.inputBg, border:`1px solid ${t.inputBorder}`, borderRadius:8, padding:"4px 8px", color: t.text, fontSize:13, outline:"none" }}/>
+          <input type="text" inputMode="numeric" pattern="[0-9]*" value={domVal}
+            onChange={e => updateDom(e.target.value)}
+            onBlur={e => { const n = parseInt(e.target.value,10); if (isNaN(n)||n<1) setDomVal("1"); else if (n>31) setDomVal("31"); }}
+            style={{ width:60, background: t.inputBg, border:`1px solid ${t.inputBorder}`, borderRadius:8, padding:"4px 8px", color: t.text, fontSize:13, outline:"none", textAlign:"center" }}/>
           <span style={{ fontSize:12, color: t.sub }}>日</span>
         </div>
       )}
@@ -458,16 +464,26 @@ function TodoDetailModal({ todo, tags, onClose, onSave, theme }) {
 // ─── Location Modal ────────────────────────────────────────────────────────────
 function LocationModal({ lat, lng, onClose, theme }) {
   const t = theme;
+  const TOKUBAI_VISITED_KEY = "tokubai_visited";
+  const [tokubaiVisited, setTokubaiVisited] = useState(() => {
+    try { return !!localStorage.getItem(TOKUBAI_VISITED_KEY); } catch { return false; }
+  });
+
+  const handleTokubaiClick = (url) => {
+    try { localStorage.setItem(TOKUBAI_VISITED_KEY, "1"); } catch {}
+    setTokubaiVisited(true);
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   const links = [
-    { label: "シュフー！", emoji: "🛍️", url: `https://www.shufoo.net/map/?lat=${lat}&lng=${lng}` },
-    { label: "Googleマップ スーパー", emoji: "🗺️", url: `https://www.google.com/maps/search/%E3%82%B9%E3%83%BC%E3%83%91%E3%83%BC/@${lat},${lng},14z` },
-    { label: "トクバイ", emoji: "💰", url: `https://tokubai.co.jp/?lat=${lat}&lng=${lng}` },
+    { label: "Googleマップ スーパー検索", emoji: "🗺️", url: `https://www.google.com/maps/search/%E3%82%B9%E3%83%BC%E3%83%91%E3%83%BC/@${lat},${lng},14z` },
   ];
+
   return (
     <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
       <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:340,boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}` }} onClick={e=>e.stopPropagation()}>
         <div style={{ padding:"18px 20px 14px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
-          <span style={{ fontSize:15,fontWeight:700,color:t.text }}>📍 近所の安売り情報</span>
+          <span style={{ fontSize:15,fontWeight:700,color:t.text }}>🏷️ 周辺お得情報</span>
           <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
         </div>
         <div style={{ padding:"12px 16px" }}>
@@ -482,8 +498,26 @@ function LocationModal({ lat, lng, onClose, theme }) {
               <span style={{ marginLeft:"auto",fontSize:12,color:t.sub }}>→</span>
             </a>
           ))}
+          {/* トクバイ: 初回は近くの店舗ページ、2回目以降はお気に入り店舗も表示 */}
+          <button onClick={() => handleTokubaiClick(`https://tokubai.co.jp/?lat=${lat}&lng=${lng}`)}
+            style={{ display:"flex",alignItems:"center",gap:12,background:t.inputBg,borderRadius:12,padding:"14px 16px",marginBottom: tokubaiVisited ? 8 : 0,border:`1px solid ${t.border}`,width:"100%",cursor:"pointer",fontFamily:"inherit" }}>
+            <span style={{ fontSize:22 }}>💰</span>
+            <span style={{ fontSize:14,color:t.text,fontWeight:600 }}>トクバイ（近くの特売）</span>
+            <span style={{ marginLeft:"auto",fontSize:12,color:t.sub }}>→</span>
+          </button>
+          {tokubaiVisited && (
+            <button onClick={() => { window.open("https://tokubai.co.jp/follows/list", "_blank", "noopener,noreferrer"); }}
+              style={{ display:"flex",alignItems:"center",gap:12,background:"rgba(124,106,247,0.1)",borderRadius:12,padding:"14px 16px",marginBottom:0,border:`1px solid rgba(124,106,247,0.3)`,width:"100%",cursor:"pointer",fontFamily:"inherit" }}>
+              <span style={{ fontSize:22 }}>📌</span>
+              <div style={{ textAlign:"left" }}>
+                <div style={{ fontSize:14,color:"#a78bfa",fontWeight:600 }}>登録済み店舗の特売情報</div>
+                <div style={{ fontSize:11,color:t.sub,marginTop:2 }}>フォロー中の店舗をチェック</div>
+              </div>
+              <span style={{ marginLeft:"auto",fontSize:12,color:t.sub }}>→</span>
+            </button>
+          )}
         </div>
-        <div style={{ padding:"0 16px 16px" }}>
+        <div style={{ padding:"8px 16px 16px" }}>
           <button onClick={onClose} style={{ width:"100%",background:t.chipOff,border:"none",borderRadius:12,color:t.sub,fontSize:14,padding:"12px 0",cursor:"pointer",fontFamily:"inherit" }}>閉じる</button>
         </div>
       </div>
@@ -901,13 +935,15 @@ export default function TodoApp() {
         input,textarea,select{font-family:inherit;}
         input:focus,textarea:focus,select:focus{outline:none;}
         .sidebar-panel{display:flex;}
+        .hamburger-btn{display:none;}
         @media (max-width:767px){
           .sidebar-panel{
             position:fixed;left:0;top:0;bottom:0;z-index:100;
-            transform:translateX(-100%);
+            transform:translateX(-100%);transition:transform 0.25s ease;
           }
           .sidebar-panel.open{transform:translateX(0);}
           .sidebar-overlay{display:block!important;}
+          .hamburger-btn{display:flex!important;}
         }
       `}</style>
 
@@ -956,9 +992,9 @@ export default function TodoApp() {
           </div>
           {/* Location button */}
           <button onClick={handleLocationClick}
-            title="近所の安売り情報"
-            style={{ background: userLoc ? "rgba(124,106,247,0.15)" : t.chipOff, border:"none", borderRadius:9, color: userLoc ? "#a78bfa" : t.sub, padding:"8px 10px", fontSize:16, display:"flex", alignItems:"center", flexShrink:0 }}>
-            {locLoading ? "⌛" : "📍"}
+            title="周辺お得情報"
+            style={{ background: userLoc ? "rgba(124,106,247,0.15)" : t.chipOff, border:"none", borderRadius:9, color: userLoc ? "#a78bfa" : t.sub, padding:"6px 10px", fontSize:12, display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
+            {locLoading ? "⌛" : "🏷️"}<span style={{fontSize:11}}>周辺お得情報</span>
           </button>
         </div>
 
