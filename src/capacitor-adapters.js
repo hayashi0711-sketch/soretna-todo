@@ -94,20 +94,34 @@ export async function requestSpeechPermission() {
   return true; // Web Speech API requires no explicit permission request
 }
 
-export function startListening({ onResult, onEnd, onError }) {
-  return startWebSpeech({ onResult, onEnd, onError });
+export function startListening({ onResult, onInterim, onEnd, onError }) {
+  return startWebSpeech({ onResult, onInterim, onEnd, onError });
 }
 
-function startWebSpeech({ onResult, onEnd, onError }) {
+function startWebSpeech({ onResult, onInterim, onEnd, onError }) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { onError?.('unsupported'); onEnd?.(); return () => {}; }
   const r = new SR();
-  r.lang = 'ja-JP'; r.continuous = false; r.interimResults = false;
-  r.onresult = e => onResult(e.results[0][0].transcript);
-  r.onerror  = e => onError?.(e);
-  r.onend    = () => onEnd?.();
+  r.lang = 'ja-JP';
+  r.continuous = true;
+  r.interimResults = true;
+  r.onresult = e => {
+    let final = '';
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        final += e.results[i][0].transcript;
+      } else {
+        interim += e.results[i][0].transcript;
+      }
+    }
+    if (final) onResult?.(final);
+    if (interim) onInterim?.(interim);
+  };
+  r.onerror = e => { onError?.(e.error || e); };
+  r.onend   = () => onEnd?.();
   r.start();
-  return () => { try { r.stop(); } catch {} };
+  return () => { try { r.abort(); } catch {} };
 }
 
 // ── Keyboard (native only) ────────────────────────────────────────────────────
