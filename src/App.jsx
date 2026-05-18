@@ -31,16 +31,15 @@ const fmtPrice = p => !p ? "" : (p.includes("円") ? p : p + "円");
 const REPEAT_LABELS = {
   daily:           (h) => h != null ? `毎日 ${h}時` : "毎日",
   days:            (d) => `${d}日ごと`,
-  weekly:          "毎週",
   "weekly-days":   (wds) => `毎週${wds.map(d => WEEKDAY_LABELS[d]).join("・")}`,
-  monthly:         "毎月",
   "monthly-fixed": (d) => `毎月${d}日`,
-  yearly:          "毎年",
+  yearly:          (m) => m != null ? `毎年${m}月` : "毎年",
 };
 
 function getRepeatLabel(repeat) {
   if (!repeat) return null;
-  if (repeat.type === "daily") return repeat.hour != null ? `毎日 ${repeat.hour}時` : "毎日";
+  if (repeat.type === "daily")  return repeat.hour  != null ? `毎日 ${repeat.hour}時` : "毎日";
+  if (repeat.type === "yearly") return repeat.month != null ? `毎年${repeat.month}月` : "毎年";
   const base = REPEAT_LABELS[repeat.type];
   if (typeof base === "function") {
     if (repeat.type === "weekly-days") return base(repeat.weekdays || [1]);
@@ -82,6 +81,7 @@ function calcNextDeadline(repeat, fromDate) {
       break;
     case "yearly":
       d.setFullYear(d.getFullYear() + 1);
+      if (repeat.month != null) d.setMonth(repeat.month - 1);
       break;
     default:
       d.setDate(d.getDate() + 1);
@@ -234,10 +234,17 @@ function WheelPicker({ items, value, onChange, width=80, visibleCount=5, theme }
         height:"100%", overflowY:"scroll", scrollSnapType:"y mandatory",
         WebkitOverflowScrolling:"touch" }}>
         {padded.map((item, i) => (
-          <div key={i} style={{
-            height:ITEM_H, display:"flex", alignItems:"center", justifyContent:"center",
-            scrollSnapAlign:"start", fontSize:16, fontWeight:item?600:400,
-            color:item?t.text:"transparent", userSelect:"none" }}>
+          <div key={i}
+            onClick={() => {
+              if (!item) return;
+              listRef.current?.scrollTo({ top: (i - PAD) * ITEM_H, behavior: "smooth" });
+              onChange(item.value);
+            }}
+            style={{
+              height:ITEM_H, display:"flex", alignItems:"center", justifyContent:"center",
+              scrollSnapAlign:"start", fontSize:16, fontWeight:item?600:400,
+              color:item?t.text:"transparent", userSelect:"none",
+              cursor: item ? "pointer" : "default" }}>
             {item?.label ?? ""}
           </div>
         ))}
@@ -248,47 +255,41 @@ function WheelPicker({ items, value, onChange, width=80, visibleCount=5, theme }
 
 // ─── PriceWheelPicker ─────────────────────────────────────────────────────────
 function PriceWheelPicker({ value, onChange, theme }) {
-  const numVal = parseInt(value || "0", 10);
-  const initH = Math.min(10, Math.floor(numVal / 100));
-  const initT = initH >= 10 ? 0 : Math.floor((numVal % 100) / 10);
-  const initO = initH >= 10 ? 0 : numVal % 10;
-  const [hVal, setHVal] = useState(initH);
-  const [tVal, setTVal] = useState(initT);
-  const [oVal, setOVal] = useState(initO);
+  const numVal = Math.min(9999, parseInt(value || "0", 10));
+  const [senVal, setSenVal] = useState(Math.floor(numVal / 1000));
+  const [hVal,   setHVal]   = useState(Math.floor((numVal % 1000) / 100));
+  const [tVal,   setTVal]   = useState(Math.floor((numVal % 100) / 10));
+  const [oVal,   setOVal]   = useState(numVal % 10);
   const t = theme;
 
-  const emit = (h, tv, o) => {
-    const total = h >= 10 ? 1000 : h * 100 + tv * 10 + o;
+  const emit = (s, h, tv, o) => {
+    const total = s * 1000 + h * 100 + tv * 10 + o;
     onChange(total === 0 ? "" : String(total));
   };
 
-  const locked = hVal >= 10;
+  const digits = Array.from({length:10},(_,i)=>({value:i,label:String(i)}));
 
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+    <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+      <div>
+        <div style={{ fontSize:10, color:t.sub, textAlign:"center", marginBottom:2 }}>千</div>
+        <WheelPicker items={digits} value={senVal} visibleCount={3} width={44} theme={t}
+          onChange={v => { const n=Number(v); setSenVal(n); emit(n,hVal,tVal,oVal); }}/>
+      </div>
       <div>
         <div style={{ fontSize:10, color:t.sub, textAlign:"center", marginBottom:2 }}>百</div>
-        <WheelPicker
-          items={Array.from({length:11},(_,i)=>({value:i,label:i===10?"1K":String(i)}))}
-          value={hVal} visibleCount={3} width={54} theme={t}
-          onChange={v => { const n=Number(v); setHVal(n); if(n>=10){setTVal(0);setOVal(0);} emit(n,n>=10?0:tVal,n>=10?0:oVal); }}
-        />
+        <WheelPicker items={digits} value={hVal} visibleCount={3} width={44} theme={t}
+          onChange={v => { const n=Number(v); setHVal(n); emit(senVal,n,tVal,oVal); }}/>
       </div>
-      <div style={{ opacity: locked ? 0.3 : 1 }}>
+      <div>
         <div style={{ fontSize:10, color:t.sub, textAlign:"center", marginBottom:2 }}>十</div>
-        <WheelPicker
-          items={Array.from({length:10},(_,i)=>({value:i,label:String(i)}))}
-          value={tVal} visibleCount={3} width={54} theme={t}
-          onChange={v => { if(locked) return; const n=Number(v); setTVal(n); emit(hVal,n,oVal); }}
-        />
+        <WheelPicker items={digits} value={tVal} visibleCount={3} width={44} theme={t}
+          onChange={v => { const n=Number(v); setTVal(n); emit(senVal,hVal,n,oVal); }}/>
       </div>
-      <div style={{ opacity: locked ? 0.3 : 1 }}>
+      <div>
         <div style={{ fontSize:10, color:t.sub, textAlign:"center", marginBottom:2 }}>一</div>
-        <WheelPicker
-          items={Array.from({length:10},(_,i)=>({value:i,label:String(i)}))}
-          value={oVal} visibleCount={3} width={54} theme={t}
-          onChange={v => { if(locked) return; const n=Number(v); setOVal(n); emit(hVal,tVal,n); }}
-        />
+        <WheelPicker items={digits} value={oVal} visibleCount={3} width={44} theme={t}
+          onChange={v => { const n=Number(v); setOVal(n); emit(senVal,hVal,tVal,n); }}/>
       </div>
       <span style={{ fontSize:18, color:t.sub, fontWeight:600, alignSelf:"center", marginTop:16 }}>円</span>
     </div>
@@ -404,9 +405,7 @@ function RepeatPicker({ value, onChange, theme }) {
   const types = [
     { key: "daily",         label: "毎日" },
     { key: "days",          label: "X日ごと" },
-    { key: "weekly",        label: "毎週" },
     { key: "weekly-days",   label: "曜日指定" },
-    { key: "monthly",       label: "毎月" },
     { key: "monthly-fixed", label: "毎月X日" },
     { key: "yearly",        label: "毎年" },
   ];
@@ -416,14 +415,16 @@ function RepeatPicker({ value, onChange, theme }) {
   const [daysVal,  setDaysVal]  = useState(value?.days || 2);
   const [domVal,   setDomVal]   = useState(value?.dayOfMonth || 1);
   const [weekdays, setWeekdays] = useState(value?.weekdays || [1]);
+  const [monthVal, setMonthVal] = useState(value?.month ?? new Date().getMonth() + 1);
 
   const select = (key) => {
     if (current === key) { onChange(null); return; }
-    if (key === "daily")             onChange({ type: key, hour: hourVal });
-    else if (key === "days")         onChange({ type: key, days: daysVal });
+    if (key === "daily")              onChange({ type: key, hour: hourVal });
+    else if (key === "days")          onChange({ type: key, days: daysVal });
     else if (key === "monthly-fixed") onChange({ type: key, dayOfMonth: domVal });
-    else if (key === "weekly-days")  onChange({ type: key, weekdays });
-    else                             onChange({ type: key });
+    else if (key === "weekly-days")   onChange({ type: key, weekdays });
+    else if (key === "yearly")        onChange({ type: key, month: monthVal });
+    else                              onChange({ type: key });
   };
 
   const toggleWeekday = (wd) => {
@@ -497,6 +498,16 @@ function RepeatPicker({ value, onChange, theme }) {
               );
             })}
           </div>
+        </div>
+      )}
+      {current === "yearly" && (
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginTop:8 }}>
+          <span style={{ fontSize:12, color:t.sub }}>月:</span>
+          <WheelPicker
+            items={Array.from({length:12},(_,i)=>({value:i+1,label:`${i+1}月`}))}
+            value={monthVal} visibleCount={3} width={80} theme={t}
+            onChange={m => { const n=Number(m); setMonthVal(n); onChange({type:"yearly",month:n}); }}
+          />
         </div>
       )}
     </div>
@@ -688,18 +699,23 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
                 {allStores.map(s=><option key={s} value={s}/>)}
               </datalist>
               {storePrices.map((sp, i) => (
-                <div key={i} style={{ display:"flex",gap:5,marginBottom:8,alignItems:"flex-end",flexWrap:"wrap" }}>
-                  <input value={sp.store} list={`store-names-${todo.id}`}
-                    onChange={e=>setStorePrices(prev=>prev.map((x,j)=>j===i?{...x,store:e.target.value}:x))}
-                    placeholder="店舗名"
-                    style={{ ...inputSt,flex:1,minWidth:80 }}/>
-                  <WheelPicker
-                    items={["","10","20","30","50","80","100","120","150","200","250","300","350","400","500","700","1000"].map(p=>({value:p,label:p?`${p}円`:"なし"}))}
-                    value={sp.price} visibleCount={3} width={90} theme={t}
+                <div key={i} style={{ background:t.card,borderRadius:12,border:`1px solid ${t.border}`,padding:"10px 12px",marginBottom:8 }}>
+                  {/* Row 1: store name + delete */}
+                  <div style={{ display:"flex",gap:6,alignItems:"center",marginBottom:10 }}>
+                    <input value={sp.store} list={`store-names-${todo.id}`}
+                      onChange={e=>setStorePrices(prev=>prev.map((x,j)=>j===i?{...x,store:e.target.value}:x))}
+                      placeholder="店舗名"
+                      style={{ ...inputSt,flex:1 }}/>
+                    <button onClick={()=>setStorePrices(prev=>prev.filter((_,j)=>j!==i))}
+                      style={{ background:"rgba(248,113,113,0.15)",border:"none",borderRadius:8,color:"#f87171",padding:"0 12px",cursor:"pointer",fontFamily:"inherit",fontSize:14,flexShrink:0,height:36 }}>×</button>
+                  </div>
+                  {/* Row 2: 4-digit price wheel */}
+                  <PriceWheelPicker
+                    value={sp.price}
                     onChange={v => setStorePrices(prev=>prev.map((x,j)=>j===i?{...x,price:v}:x))}
+                    theme={t}
                   />
-                  <button onClick={()=>setStorePrices(prev=>prev.filter((_,j)=>j!==i))}
-                    style={{ background:"rgba(248,113,113,0.15)",border:"none",borderRadius:8,color:"#f87171",padding:"0 10px",cursor:"pointer",fontFamily:"inherit",fontSize:14,flexShrink:0,height:36 }}>×</button>
+                  {sp.price && <div style={{ fontSize:11, color:"#fbbf24", marginTop:4 }}>設定: {sp.price}円</div>}
                 </div>
               ))}
               <button onClick={()=>setStorePrices(prev=>[...prev,{store:"",price:""}])}
@@ -918,20 +934,12 @@ export default function TodoApp() {
   const [userLoc,     setUserLoc]     = useState(null);
   const [locLoading,  setLocLoading]  = useState(false);
   const [showLocModal,setShowLocModal]= useState(false);
-  // Drag reorder
-  const [dragId,      setDragId]      = useState(null);
-  const [dragOverId,  setDragOverId]  = useState(null);
-
   const inputRef    = useRef(null);
   const nextId      = useRef(10);
   const stopVoice   = useRef(null);
   const notifMap    = useRef({});
   const notifTimer  = useRef(null);
   const wasListening = useRef(false);
-  const itemRefs    = useRef({});
-  const dragTimerRef = useRef(null);
-  const dragActiveRef = useRef(false);
-  const touchStartYRef = useRef(0);
 
   // Voice auto-add refs
   const voiceSilenceTimer = useRef(null);
@@ -1150,6 +1158,7 @@ export default function TodoApp() {
         done: false,
         deadline: nextDeadline,
         createdAt: Date.now(),
+        nextAppearAt: nextDeadline,
       };
       setTodos(prev => [nextTodo, ...prev.map(td => td.id === id ? { ...td, done: true } : td)]);
     } else {
@@ -1169,61 +1178,6 @@ export default function TodoApp() {
     setEditTodo(null);
   };
 
-  // ── Drag-to-reorder (long press) ─────────────────────────────────────────
-  const handleItemTouchStart = useCallback((e, id) => {
-    touchStartYRef.current = e.touches[0].clientY;
-    dragActiveRef.current = false;
-    clearTimeout(dragTimerRef.current);
-    dragTimerRef.current = setTimeout(() => {
-      dragActiveRef.current = true;
-      haptics.medium();
-      setDragId(id);
-    }, 500);
-  }, []);
-
-  const handleItemTouchMove = useCallback((e) => {
-    const dy = Math.abs(e.touches[0].clientY - touchStartYRef.current);
-    if (!dragActiveRef.current) {
-      if (dy > 10) clearTimeout(dragTimerRef.current);
-      return;
-    }
-    e.preventDefault();
-    const y = e.touches[0].clientY;
-    let found = null;
-    Object.keys(itemRefs.current).forEach(refId => {
-      const el = itemRefs.current[Number(refId)];
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      if (y >= r.top && y <= r.bottom) found = Number(refId);
-    });
-    if (found !== null) setDragOverId(found);
-  }, []);
-
-  const handleItemTouchEnd = useCallback(() => {
-    clearTimeout(dragTimerRef.current);
-    if (dragActiveRef.current && dragId != null && dragOverId != null && dragId !== dragOverId) {
-      setTodos(prev => {
-        const arr = [...prev];
-        const fi = arr.findIndex(td => td.id === dragId);
-        const ti = arr.findIndex(td => td.id === dragOverId);
-        if (fi < 0 || ti < 0) return prev;
-        const [item] = arr.splice(fi, 1);
-        arr.splice(ti, 0, item);
-        return arr;
-      });
-    }
-    dragActiveRef.current = false;
-    setDragId(null);
-    setDragOverId(null);
-  }, [dragId, dragOverId]);
-
-  const handleItemTouchCancel = useCallback(() => {
-    clearTimeout(dragTimerRef.current);
-    dragActiveRef.current = false;
-    setDragId(null);
-    setDragOverId(null);
-  }, []);
-
   // ── Derived ───────────────────────────────────────────────────────────────
   const getTag = id => tags.find(tg => tg.id === id);
 
@@ -1237,6 +1191,7 @@ export default function TodoApp() {
   };
 
   const filtered = applyViewFilter(todos)
+    .filter(td => !td.nextAppearAt || new Date(td.nextAppearAt) <= new Date())
     .filter(td => (filter === "all" || td.tagId === filter) && (showDone || !td.done))
     .sort((a, b) => {
       if (sortBy === "priority") return (PRIORITY_CONFIG[a.priority||"none"].order) - (PRIORITY_CONFIG[b.priority||"none"].order);
@@ -1424,22 +1379,13 @@ export default function TodoApp() {
             return (
               <div
                 key={todo.id}
-                ref={el => { if(el) itemRefs.current[todo.id]=el; else delete itemRefs.current[todo.id]; }}
-                onTouchStart={e=>handleItemTouchStart(e,todo.id)}
-                onTouchMove={handleItemTouchMove}
-                onTouchEnd={handleItemTouchEnd}
-                onTouchCancel={handleItemTouchCancel}
                 className={`todo-item slide-in${animId===todo.id?" pop":""}`}
                 style={{
                   display:"flex",alignItems:"flex-start",gap:10,
                   padding:"11px 12px",borderRadius:14,marginBottom:6,
                   background:overdue?"rgba(248,113,113,0.06)":todo.done?isLight?"rgba(0,0,0,0.02)":"rgba(255,255,255,0.02)":isLight?"rgba(0,0,0,0.03)":"rgba(255,255,255,0.04)",
-                  border:`1px solid ${dragId===todo.id?"#7c6af7":overdue?"rgba(248,113,113,0.2)":todayDue?"rgba(251,191,36,0.2)":t.border}`,
-                  borderStyle: dragId===todo.id ? "dashed" : "solid",
+                  border:`1px solid ${overdue?"rgba(248,113,113,0.2)":todayDue?"rgba(251,191,36,0.2)":t.border}`,
                   opacity:todo.done?0.5:1,
-                  transform: dragOverId===todo.id&&dragId!==todo.id ? "translateY(-3px)" : "none",
-                  boxShadow: dragId===todo.id ? "0 8px 24px rgba(124,106,247,0.4)" : "none",
-                  transition: "transform 0.15s, box-shadow 0.15s, border-color 0.15s",
                   userSelect: "none",
                 }}>
                 <button onClick={()=>toggleTodo(todo.id)}
