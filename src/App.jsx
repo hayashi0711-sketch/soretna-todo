@@ -15,23 +15,70 @@ const DEFAULT_TAGS = [
   { id: "urgent",   label: "急ぎ", color: "#f87171" },
 ];
 const INITIAL_TODOS = [
-  { id: 1, text: "プロジェクトの資料を整理する", done: false, tagId: "work",     priority: "high",   deadline: null, createdAt: Date.now()-3000 },
-  { id: 2, text: "買い物リストを作る",           done: false, tagId: "personal", priority: "medium", deadline: null, createdAt: Date.now()-2000 },
-  { id: 3, text: "メールを返信する",             done: true,  tagId: "urgent",   priority: "low",    deadline: null, createdAt: Date.now()-1000 },
+  { id: 1, text: "プロジェクトの資料を整理する", done: false, tagId: "work",     priority: "high",   deadline: null, createdAt: Date.now()-3000, repeat: null },
+  { id: 2, text: "買い物リストを作る",           done: false, tagId: "personal", priority: "medium", deadline: null, createdAt: Date.now()-2000, repeat: null },
+  { id: 3, text: "メールを返信する",             done: true,  tagId: "urgent",   priority: "low",    deadline: null, createdAt: Date.now()-1000, repeat: null },
 ];
+
+// 食料品キーワード
+const GROCERY_KEYWORDS = ['牛乳','卵','たまご','野菜','肉','魚','パン','豆腐','米','果物','チーズ','ヨーグルト','鶏肉','豚肉','牛肉','キャベツ','にんじん','トマト','玉ねぎ','じゃがいも','大根','ほうれん草','もやし','バナナ','りんご'];
+
+// 繰り返しラベル
+const REPEAT_LABELS = {
+  daily:          "毎日",
+  days:           (d) => `${d}日ごと`,
+  weekly:         "毎週",
+  monthly:        "毎月",
+  "monthly-fixed": (d) => `毎月${d}日`,
+  yearly:         "毎年",
+};
+
+function getRepeatLabel(repeat) {
+  if (!repeat) return null;
+  const base = REPEAT_LABELS[repeat.type];
+  if (typeof base === "function") return base(repeat.days || repeat.dayOfMonth || 1);
+  return base || repeat.type;
+}
+
+// 繰り返しタスクの次回締め切りを計算
+function calcNextDeadline(repeat, fromDate) {
+  const d = new Date(fromDate || Date.now());
+  switch (repeat.type) {
+    case "daily":
+      d.setDate(d.getDate() + 1);
+      break;
+    case "days":
+      d.setDate(d.getDate() + (repeat.days || 1));
+      break;
+    case "weekly":
+      d.setDate(d.getDate() + 7);
+      break;
+    case "monthly":
+      d.setMonth(d.getMonth() + 1);
+      break;
+    case "monthly-fixed":
+      d.setMonth(d.getMonth() + 1);
+      d.setDate(repeat.dayOfMonth || 1);
+      break;
+    case "yearly":
+      d.setFullYear(d.getFullYear() + 1);
+      break;
+    default:
+      d.setDate(d.getDate() + 1);
+  }
+  return d.toISOString();
+}
 
 // ─── Theme Definitions ────────────────────────────────────────────────────────
-// Each theme: bg (outer), card (inner card), text, subtext, border, inputBg
 const THEMES = [
-  { id: "dark",    label: "ダーク",    emoji: "🌑", bg: "#0f0f13", card: "#16161d", headerCard: "#1a1a24", text: "#f0f0f0", sub: "#888", subDim: "#444", border: "rgba(255,255,255,0.06)", inputBg: "#1e1e28", inputBorder: "rgba(255,255,255,0.07)", chipOff: "rgba(255,255,255,0.05)", chipOffText: "#888", calBg: "#1e1e2e" },
-  { id: "navy",    label: "ネイビー",  emoji: "🌊", bg: "#0a0e1a", card: "#111827", headerCard: "#161e30", text: "#e8eaf0", sub: "#7a8aaa", subDim: "#3a4560", border: "rgba(100,130,200,0.12)", inputBg: "#1a2338", inputBorder: "rgba(100,130,200,0.15)", chipOff: "rgba(100,130,200,0.08)", chipOffText: "#7a8aaa", calBg: "#1a2338" },
-  { id: "forest",  label: "フォレスト",emoji: "🌿", bg: "#0b130d", card: "#121a14", headerCard: "#172019", text: "#e0ede2", sub: "#6a9470", subDim: "#2a4030", border: "rgba(80,160,100,0.12)", inputBg: "#1a2a1c", inputBorder: "rgba(80,160,100,0.15)", chipOff: "rgba(80,160,100,0.08)", chipOffText: "#6a9470", calBg: "#1a2a1c" },
-  { id: "rose",    label: "ローズ",    emoji: "🌸", bg: "#160d10", card: "#1e1218", headerCard: "#251520", text: "#f0e4e8", sub: "#b07080", subDim: "#50303a", border: "rgba(200,80,120,0.12)", inputBg: "#2a1820", inputBorder: "rgba(200,80,120,0.15)", chipOff: "rgba(200,80,120,0.08)", chipOffText: "#b07080", calBg: "#2a1820" },
-  { id: "light",   label: "ライト",    emoji: "☀️", bg: "#f0f2f8", card: "#ffffff", headerCard: "#f8f9fc", text: "#1a1a2e", sub: "#666888", subDim: "#aaaacc", border: "rgba(0,0,0,0.07)", inputBg: "#f0f2f8", inputBorder: "rgba(0,0,0,0.1)", chipOff: "rgba(0,0,0,0.06)", chipOffText: "#666888", calBg: "#f0f2f8" },
-  { id: "sand",    label: "サンド",    emoji: "🏖️", bg: "#1a1510", card: "#211c14", headerCard: "#28221a", text: "#f0e8d8", sub: "#a09070", subDim: "#504030", border: "rgba(180,140,80,0.15)", inputBg: "#2a2218", inputBorder: "rgba(180,140,80,0.18)", chipOff: "rgba(180,140,80,0.08)", chipOffText: "#a09070", calBg: "#2a2218" },
+  { id: "dark",    label: "ダーク",    emoji: "🌑", bg: "#0f0f13", card: "#16161d", headerCard: "#1a1a24", text: "#f0f0f0", sub: "#888", subDim: "#444", border: "rgba(255,255,255,0.06)", inputBg: "#1e1e28", inputBorder: "rgba(255,255,255,0.07)", chipOff: "rgba(255,255,255,0.05)", chipOffText: "#888", calBg: "#1e1e2e", sidebarBg: "#13131a", sidebarBorder: "rgba(255,255,255,0.06)" },
+  { id: "navy",    label: "ネイビー",  emoji: "🌊", bg: "#0a0e1a", card: "#111827", headerCard: "#161e30", text: "#e8eaf0", sub: "#7a8aaa", subDim: "#3a4560", border: "rgba(100,130,200,0.12)", inputBg: "#1a2338", inputBorder: "rgba(100,130,200,0.15)", chipOff: "rgba(100,130,200,0.08)", chipOffText: "#7a8aaa", calBg: "#1a2338", sidebarBg: "#0d1525", sidebarBorder: "rgba(100,130,200,0.12)" },
+  { id: "forest",  label: "フォレスト",emoji: "🌿", bg: "#0b130d", card: "#121a14", headerCard: "#172019", text: "#e0ede2", sub: "#6a9470", subDim: "#2a4030", border: "rgba(80,160,100,0.12)", inputBg: "#1a2a1c", inputBorder: "rgba(80,160,100,0.15)", chipOff: "rgba(80,160,100,0.08)", chipOffText: "#6a9470", calBg: "#1a2a1c", sidebarBg: "#0e1810", sidebarBorder: "rgba(80,160,100,0.12)" },
+  { id: "rose",    label: "ローズ",    emoji: "🌸", bg: "#160d10", card: "#1e1218", headerCard: "#251520", text: "#f0e4e8", sub: "#b07080", subDim: "#50303a", border: "rgba(200,80,120,0.12)", inputBg: "#2a1820", inputBorder: "rgba(200,80,120,0.15)", chipOff: "rgba(200,80,120,0.08)", chipOffText: "#b07080", calBg: "#2a1820", sidebarBg: "#190e12", sidebarBorder: "rgba(200,80,120,0.12)" },
+  { id: "light",   label: "ライト",    emoji: "☀️", bg: "#f0f2f8", card: "#ffffff", headerCard: "#f8f9fc", text: "#1a1a2e", sub: "#666888", subDim: "#aaaacc", border: "rgba(0,0,0,0.07)", inputBg: "#f0f2f8", inputBorder: "rgba(0,0,0,0.1)", chipOff: "rgba(0,0,0,0.06)", chipOffText: "#666888", calBg: "#f0f2f8", sidebarBg: "#e8eaf4", sidebarBorder: "rgba(0,0,0,0.08)" },
+  { id: "sand",    label: "サンド",    emoji: "🏖️", bg: "#1a1510", card: "#211c14", headerCard: "#28221a", text: "#f0e8d8", sub: "#a09070", subDim: "#504030", border: "rgba(180,140,80,0.15)", inputBg: "#2a2218", inputBorder: "rgba(180,140,80,0.18)", chipOff: "rgba(180,140,80,0.08)", chipOffText: "#a09070", calBg: "#2a2218", sidebarBg: "#161208", sidebarBorder: "rgba(180,140,80,0.15)" },
 ];
 
-// Determine good text color for contrast on top of a given theme
 const getContrastText = (themeId) => themeId === "light" ? "#1a1a2e" : "#f0f0f0";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -43,6 +90,22 @@ const fmtDate = (iso) => {
 const isToday = (iso) => {
   if (!iso) return false;
   const d = new Date(iso), n = new Date();
+  return d.getFullYear()===n.getFullYear() && d.getMonth()===n.getMonth() && d.getDate()===n.getDate();
+};
+const isTomorrow = (iso) => {
+  if (!iso) return false;
+  const d = new Date(iso), n = new Date();
+  const tom = new Date(n); tom.setDate(n.getDate() + 1);
+  return d.getFullYear()===tom.getFullYear() && d.getMonth()===tom.getMonth() && d.getDate()===tom.getDate();
+};
+const isThisWeek = (iso) => {
+  if (!iso) return false;
+  const d = new Date(iso), n = new Date();
+  const weekLater = new Date(n); weekLater.setDate(n.getDate() + 7);
+  return d >= n && d <= weekLater;
+};
+const isCreatedToday = (ts) => {
+  const d = new Date(ts), n = new Date();
   return d.getFullYear()===n.getFullYear() && d.getMonth()===n.getMonth() && d.getDate()===n.getDate();
 };
 const isPast = (iso) => iso && new Date(iso) < new Date();
@@ -106,6 +169,12 @@ const PaletteIcon = () => (
     <path d="M12 2C6.5 2 2 6.5 2 12a10 10 0 0010 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
   </svg>
 );
+const RepeatIcon = ({ size=12 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/>
+    <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/>
+  </svg>
+);
 
 // ─── Mini Calendar ─────────────────────────────────────────────────────────────
 function MiniCalendar({ value, onChange, theme }) {
@@ -116,11 +185,9 @@ function MiniCalendar({ value, onChange, theme }) {
   const [selDate,   setSelDate]   = useState(value ? initDate.getDate() : null);
   const [selHour,   setSelHour]   = useState(value ? initDate.getHours() : 9);
   const [selMin,    setSelMin]    = useState(value ? initDate.getMinutes() : 0);
-  // ★ ref to scroll into view after calendar opens
   const calRef = useRef(null);
 
   useEffect(() => {
-    // Scroll the calendar into view smoothly so user sees the time picker
     calRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, []);
 
@@ -150,19 +217,16 @@ function MiniCalendar({ value, onChange, theme }) {
 
   return (
     <div ref={calRef} style={{ background: t.calBg, borderRadius:16, padding:"14px", border:`1px solid ${t.border}` }}>
-      {/* Month nav */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
         <button onClick={prevMonth} style={{ background: isLight?"rgba(0,0,0,0.06)":"rgba(255,255,255,0.06)", border:"none", borderRadius:8, color: t.sub, cursor:"pointer", padding:"5px 8px", display:"flex" }}><ChevronIcon dir="left"/></button>
         <span style={{ color: t.text, fontWeight:700, fontSize:14 }}>{viewYear}年 {MONTHS[viewMonth]}</span>
         <button onClick={nextMonth} style={{ background: isLight?"rgba(0,0,0,0.06)":"rgba(255,255,255,0.06)", border:"none", borderRadius:8, color: t.sub, cursor:"pointer", padding:"5px 8px", display:"flex" }}><ChevronIcon dir="right"/></button>
       </div>
-      {/* Day headers */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, marginBottom:4 }}>
         {DAYS.map((d,i)=>(
           <div key={d} style={{ textAlign:"center", fontSize:11, color: i===0?"#f87171":i===6?"#60a5fa": t.sub, padding:"2px 0" }}>{d}</div>
         ))}
       </div>
-      {/* Date cells */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 }}>
         {cells.map((d,i)=>(
           <div key={i} onClick={d?()=>pick(d):undefined} style={{
@@ -178,7 +242,6 @@ function MiniCalendar({ value, onChange, theme }) {
           }}>{d||""}</div>
         ))}
       </div>
-      {/* Time picker */}
       <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${t.border}`, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
         <ClockIcon/>
         <span style={{ color: t.sub, fontSize:12 }}>時間:</span>
@@ -191,10 +254,8 @@ function MiniCalendar({ value, onChange, theme }) {
           style={{ background: isLight?"rgba(0,0,0,0.06)":"rgba(255,255,255,0.07)", border:`1px solid ${t.border}`, borderRadius:8, color: t.text, padding:"5px 8px", fontSize:13, outline:"none" }}>
           {[0,5,10,15,20,25,30,35,40,45,50,55].map(m=><option key={m} value={m}>{String(m).padStart(2,"0")}</option>)}
         </select>
-        {/* ★ confirm badge */}
         {selDate && <span style={{ fontSize:11, color:"#a78bfa", marginLeft:"auto" }}>✓ {viewMonth+1}/{selDate} {String(selHour).padStart(2,"0")}:{String(selMin).padStart(2,"0")}</span>}
       </div>
-      {/* Hint */}
       <div style={{ marginTop:8, fontSize:11, color: t.subDim, textAlign:"center" }}>
         ↑ 日付を選んで時間を設定してください
       </div>
@@ -202,6 +263,74 @@ function MiniCalendar({ value, onChange, theme }) {
         <button onClick={()=>onChange(null)} style={{ marginTop:8, width:"100%", background:"rgba(248,113,113,0.1)", border:"none", borderRadius:10, color:"#f87171", fontSize:12, padding:"8px 0", cursor:"pointer" }}>
           締め切りを削除
         </button>
+      )}
+    </div>
+  );
+}
+
+// ─── RepeatPicker ──────────────────────────────────────────────────────────────
+function RepeatPicker({ value, onChange, theme }) {
+  const t = theme;
+  const isLight = t.id === "light";
+  const types = [
+    { key: "daily",         label: "毎日" },
+    { key: "days",          label: "X日ごと" },
+    { key: "weekly",        label: "毎週" },
+    { key: "monthly",       label: "毎月" },
+    { key: "monthly-fixed", label: "毎月X日" },
+    { key: "yearly",        label: "毎年" },
+  ];
+
+  const current = value?.type || null;
+  const [daysVal, setDaysVal] = useState(value?.days || 2);
+  const [domVal,  setDomVal]  = useState(value?.dayOfMonth || 1);
+
+  const select = (key) => {
+    if (current === key) { onChange(null); return; }
+    if (key === "days")          onChange({ type: key, days: daysVal });
+    else if (key === "monthly-fixed") onChange({ type: key, dayOfMonth: domVal });
+    else                         onChange({ type: key });
+  };
+
+  const updateDays = (v) => {
+    setDaysVal(v);
+    if (current === "days") onChange({ type: "days", days: v });
+  };
+  const updateDom = (v) => {
+    setDomVal(v);
+    if (current === "monthly-fixed") onChange({ type: "monthly-fixed", dayOfMonth: v });
+  };
+
+  return (
+    <div>
+      <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:8 }}>
+        {types.map(({ key, label }) => (
+          <button key={key} onClick={() => select(key)} style={{
+            background: current === key ? "rgba(124,106,247,0.2)" : t.chipOff,
+            color: current === key ? "#a78bfa" : t.sub,
+            border: current === key ? "1px solid rgba(124,106,247,0.4)" : "1px solid transparent",
+            borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+          }}>{label}</button>
+        ))}
+        {value && (
+          <button onClick={() => onChange(null)} style={{ background: "rgba(248,113,113,0.1)", border: "none", borderRadius: 8, color: "#f87171", padding: "5px 10px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>クリア</button>
+        )}
+      </div>
+      {current === "days" && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
+          <span style={{ fontSize:12, color: t.sub }}>間隔:</span>
+          <input type="number" min={1} max={365} value={daysVal} onChange={e => updateDays(Number(e.target.value))}
+            style={{ width:60, background: t.inputBg, border:`1px solid ${t.inputBorder}`, borderRadius:8, padding:"4px 8px", color: t.text, fontSize:13, outline:"none" }}/>
+          <span style={{ fontSize:12, color: t.sub }}>日</span>
+        </div>
+      )}
+      {current === "monthly-fixed" && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
+          <span style={{ fontSize:12, color: t.sub }}>日付:</span>
+          <input type="number" min={1} max={31} value={domVal} onChange={e => updateDom(Number(e.target.value))}
+            style={{ width:60, background: t.inputBg, border:`1px solid ${t.inputBorder}`, borderRadius:8, padding:"4px 8px", color: t.text, fontSize:13, outline:"none" }}/>
+          <span style={{ fontSize:12, color: t.sub }}>日</span>
+        </div>
       )}
     </div>
   );
@@ -277,6 +406,7 @@ function TodoDetailModal({ todo, tags, onClose, onSave, theme }) {
   const [priority, setPriority] = useState(todo.priority||"none");
   const [deadline, setDeadline] = useState(todo.deadline||null);
   const [showCal,  setShowCal]  = useState(false);
+  const [repeat,   setRepeat]   = useState(todo.repeat || null);
   const t = theme;
   return (
     <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
@@ -311,9 +441,13 @@ function TodoDetailModal({ todo, tags, onClose, onSave, theme }) {
             </button>
             {showCal && <div style={{ marginTop:8 }}><MiniCalendar value={deadline} onChange={setDeadline} theme={t}/></div>}
           </div>
+          <div style={{ marginTop:12 }}>
+            <div style={{ fontSize:11,color:t.sub,fontWeight:600,letterSpacing:1,marginBottom:6 }}>🔁 繰り返し</div>
+            <RepeatPicker value={repeat} onChange={setRepeat} theme={t}/>
+          </div>
         </div>
         <div style={{ padding:"0 20px 20px",display:"flex",gap:8 }}>
-          <button onClick={()=>onSave({...todo,text:text.trim()||todo.text,tagId,priority,deadline})} style={{ flex:1,background:"linear-gradient(135deg,#7c6af7,#a78bfa)",border:"none",borderRadius:12,color:"#fff",fontSize:14,fontWeight:700,padding:"12px 0",cursor:"pointer",fontFamily:"inherit" }}>保存</button>
+          <button onClick={()=>onSave({...todo,text:text.trim()||todo.text,tagId,priority,deadline,repeat})} style={{ flex:1,background:"linear-gradient(135deg,#7c6af7,#a78bfa)",border:"none",borderRadius:12,color:"#fff",fontSize:14,fontWeight:700,padding:"12px 0",cursor:"pointer",fontFamily:"inherit" }}>保存</button>
           <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:12,color:t.sub,fontSize:14,padding:"12px 16px",cursor:"pointer",fontFamily:"inherit" }}>キャンセル</button>
         </div>
       </div>
@@ -321,8 +455,43 @@ function TodoDetailModal({ todo, tags, onClose, onSave, theme }) {
   );
 }
 
+// ─── Location Modal ────────────────────────────────────────────────────────────
+function LocationModal({ lat, lng, onClose, theme }) {
+  const t = theme;
+  const links = [
+    { label: "シュフー！", emoji: "🛍️", url: `https://www.shufoo.net/map/?lat=${lat}&lng=${lng}` },
+    { label: "Googleマップ スーパー", emoji: "🗺️", url: `https://www.google.com/maps/search/%E3%82%B9%E3%83%BC%E3%83%91%E3%83%BC/@${lat},${lng},14z` },
+    { label: "トクバイ", emoji: "💰", url: `https://tokubai.co.jp/?lat=${lat}&lng=${lng}` },
+  ];
+  return (
+    <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
+      <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:340,boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}` }} onClick={e=>e.stopPropagation()}>
+        <div style={{ padding:"18px 20px 14px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+          <span style={{ fontSize:15,fontWeight:700,color:t.text }}>📍 近所の安売り情報</span>
+          <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
+        </div>
+        <div style={{ padding:"12px 16px" }}>
+          <div style={{ fontSize:12,color:t.sub,marginBottom:12,textAlign:"center" }}>
+            現在地: {lat.toFixed(4)}, {lng.toFixed(4)}
+          </div>
+          {links.map(link => (
+            <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer"
+              style={{ display:"flex",alignItems:"center",gap:12,background:t.inputBg,borderRadius:12,padding:"14px 16px",marginBottom:8,textDecoration:"none",border:`1px solid ${t.border}` }}>
+              <span style={{ fontSize:22 }}>{link.emoji}</span>
+              <span style={{ fontSize:14,color:t.text,fontWeight:600 }}>{link.label}</span>
+              <span style={{ marginLeft:"auto",fontSize:12,color:t.sub }}>→</span>
+            </a>
+          ))}
+        </div>
+        <div style={{ padding:"0 16px 16px" }}>
+          <button onClick={onClose} style={{ width:"100%",background:t.chipOff,border:"none",borderRadius:12,color:t.sub,fontSize:14,padding:"12px 0",cursor:"pointer",fontFamily:"inherit" }}>閉じる</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Assistant Character ───────────────────────────────────────────────────────
-// ★ Clicking anywhere on the bubble dismisses it (no × button)
 function Assistant({ todos, onDismiss, notification }) {
   const todayTodos = todos.filter(t => isToday(t.deadline));
   const allDoneToday = todayTodos.length > 0 && todayTodos.every(t => t.done);
@@ -372,6 +541,97 @@ function ThemeSwitcher({ currentThemeId, onChange }) {
   );
 }
 
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
+function Sidebar({ todos, currentView, onViewChange, themeId, onThemeChange, theme, isOpen, onClose }) {
+  const t = theme;
+  const isLight = t.id === "light";
+
+  const now = new Date();
+  const counts = {
+    inbox:   todos.filter(td => isCreatedToday(td.createdAt) && !td.done).length,
+    all:     todos.filter(td => !td.done).length,
+    today:   todos.filter(td => isToday(td.deadline) && !td.done).length,
+    tomorrow:todos.filter(td => isTomorrow(td.deadline) && !td.done).length,
+    week:    todos.filter(td => isThisWeek(td.deadline) && !td.done).length,
+  };
+
+  const navItems = [
+    { id: "inbox",    label: "受信箱",       emoji: "📥", count: counts.inbox },
+    { id: "all",      label: "すべてのタスク", emoji: "📋", count: counts.all },
+    { id: "today",    label: "今日",          emoji: "📅", count: counts.today },
+    { id: "tomorrow", label: "明日",          emoji: "🌅", count: counts.tomorrow },
+    { id: "week",     label: "今週",          emoji: "📆", count: counts.week },
+  ];
+
+  return (
+    <>
+      {/* Overlay for mobile */}
+      {isOpen && (
+        <div
+          onClick={onClose}
+          style={{ position:"fixed",inset:0,zIndex:90,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(2px)",display:"none" }}
+          className="sidebar-overlay"
+        />
+      )}
+      <div style={{
+        width: 240, flexShrink: 0,
+        background: t.sidebarBg,
+        borderRight: `1px solid ${t.sidebarBorder}`,
+        display: "flex", flexDirection: "column",
+        height: "100vh", position: "sticky", top: 0,
+        overflowY: "auto",
+        transition: "transform 0.25s cubic-bezier(.4,0,.2,1)",
+      }} className="sidebar-panel">
+        {/* App name */}
+        <div style={{ padding:"24px 20px 16px", borderBottom:`1px solid ${t.sidebarBorder}` }}>
+          <div style={{ fontFamily:"'Space Mono',monospace", fontSize:8, color:t.sub, letterSpacing:3, marginBottom:4 }}>MY TASKS</div>
+          <h1 style={{ fontSize:20, fontWeight:700, color:t.text, letterSpacing:-0.5, lineHeight:1 }}>
+            それな！<span style={{ color:"#7c6af7" }}>Todo</span>
+          </h1>
+        </div>
+
+        {/* Navigation */}
+        <nav style={{ padding:"12px 10px", flex:1 }}>
+          {navItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => { onViewChange(item.id); onClose(); }}
+              style={{
+                width:"100%", display:"flex", alignItems:"center", gap:10,
+                padding:"9px 12px", borderRadius:10, border:"none", cursor:"pointer",
+                fontFamily:"inherit", fontSize:13, fontWeight: currentView===item.id ? 700 : 400,
+                background: currentView===item.id
+                  ? isLight ? "rgba(124,106,247,0.12)" : "rgba(124,106,247,0.15)"
+                  : "transparent",
+                color: currentView===item.id ? "#a78bfa" : t.sub,
+                marginBottom:2, textAlign:"left", transition:"background 0.15s",
+              }}
+            >
+              <span style={{ fontSize:16 }}>{item.emoji}</span>
+              <span style={{ flex:1 }}>{item.label}</span>
+              {item.count > 0 && (
+                <span style={{
+                  background: currentView===item.id ? "rgba(124,106,247,0.3)" : isLight?"rgba(0,0,0,0.1)":"rgba(255,255,255,0.08)",
+                  color: currentView===item.id ? "#a78bfa" : t.subDim,
+                  borderRadius:10, padding:"1px 7px", fontSize:11, fontWeight:700, minWidth:20, textAlign:"center",
+                }}>{item.count}</span>
+              )}
+            </button>
+          ))}
+        </nav>
+
+        {/* Theme switcher */}
+        <div style={{ padding:"16px 16px 20px", borderTop:`1px solid ${t.sidebarBorder}` }}>
+          <div style={{ fontSize:11, color:t.sub, fontWeight:600, letterSpacing:1, marginBottom:8, display:"flex", alignItems:"center", gap:6 }}>
+            <PaletteIcon/> テーマ
+          </div>
+          <ThemeSwitcher currentThemeId={themeId} onChange={onThemeChange}/>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── Main App ──────────────────────────────────────────────────────────────────
 
 export default function TodoApp() {
@@ -382,6 +642,7 @@ export default function TodoApp() {
   const [selectedTag, setSelectedTag] = useState("personal");
   const [priority,    setPriority]    = useState("none");
   const [deadline,    setDeadline]    = useState(null);
+  const [repeat,      setRepeat]      = useState(null);
   const [filter,      setFilter]      = useState("all");
   const [sortBy,      setSortBy]      = useState("created");
   const [showDone,    setShowDone]    = useState(true);
@@ -389,10 +650,18 @@ export default function TodoApp() {
   const [showTagEd,   setShowTagEd]   = useState(false);
   const [editTodo,    setEditTodo]    = useState(null);
   const [showCal,     setShowCal]     = useState(false);
+  const [showRepeat,  setShowRepeat]  = useState(false);
   const [listening,   setListening]   = useState(false);
   const [notification,setNotification]= useState(null);
   const [kbHeight,    setKbHeight]    = useState(0);
   const [loaded,      setLoaded]      = useState(false);
+  // Sidebar view
+  const [sideView,    setSideView]    = useState("all");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Location
+  const [userLoc,     setUserLoc]     = useState(null);
+  const [locLoading,  setLocLoading]  = useState(false);
+  const [showLocModal,setShowLocModal]= useState(false);
 
   const inputRef    = useRef(null);
   const nextId      = useRef(10);
@@ -407,7 +676,6 @@ export default function TodoApp() {
   // ── Init: load persisted data + Capacitor setup ────────────────────────────
   useEffect(() => {
     const init = async () => {
-      // Load saved state
       const [sTheme, sTags, sTodos, sNextId, sSelTag] = await Promise.all([
         storage.get("themeId",  "dark"),
         storage.get("tags",     DEFAULT_TAGS),
@@ -422,11 +690,9 @@ export default function TodoApp() {
       setSelectedTag(sSelTag);
       setLoaded(true);
 
-      // Capacitor-native setup
       await requestNotificationPermission();
       await requestSpeechPermission();
 
-      // Keyboard height listener
       const removeKb = await addKeyboardListeners(
         h => setKbHeight(h),
         () => setKbHeight(0)
@@ -446,10 +712,11 @@ export default function TodoApp() {
       if (showTagEd) { setShowTagEd(false); return; }
       if (editTodo)  { setEditTodo(null);   return; }
       if (showCal)   { setShowCal(false);   return; }
+      if (sidebarOpen) { setSidebarOpen(false); return; }
       inputRef.current?.blur();
     }).then(fn => { remove = fn; });
     return () => remove();
-  }, [showTagEd, editTodo, showCal]);
+  }, [showTagEd, editTodo, showCal, sidebarOpen]);
 
   // ── Persist on change ─────────────────────────────────────────────────────
   useEffect(() => { if (loaded) storage.set("themeId", themeId); }, [themeId, loaded]);
@@ -475,7 +742,7 @@ export default function TodoApp() {
     });
   }, [todos, loaded]);
 
-  // ── In-app 30-min reminder (fallback when app is open) ───────────────────
+  // ── In-app 30-min reminder ───────────────────────────────────────────────
   useEffect(() => {
     notifTimer.current = setInterval(() => {
       const now = new Date();
@@ -506,6 +773,29 @@ export default function TodoApp() {
     });
   }, [listening]);
 
+  // ── Location ──────────────────────────────────────────────────────────────
+  const handleLocationClick = useCallback(() => {
+    if (userLoc) { setShowLocModal(true); return; }
+    if (!navigator.geolocation) { alert("このブラウザは位置情報に対応していません"); return; }
+    setLocLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocLoading(false);
+        setShowLocModal(true);
+      },
+      (err) => {
+        setLocLoading(false);
+        alert("位置情報の取得に失敗しました: " + err.message);
+      },
+      { timeout: 10000 }
+    );
+  }, [userLoc]);
+
+  const isGrocery = useCallback((text) => {
+    return GROCERY_KEYWORDS.some(kw => text.includes(kw));
+  }, []);
+
   // ── CRUD ──────────────────────────────────────────────────────────────────
   const addTodo = useCallback(async () => {
     const text = input.trim();
@@ -513,35 +803,61 @@ export default function TodoApp() {
     await haptics.light();
     setTodos(prev => [{
       id: nextId.current++, text, done: false,
-      tagId: selectedTag, priority, deadline, createdAt: Date.now()
+      tagId: selectedTag, priority, deadline, repeat, createdAt: Date.now()
     }, ...prev]);
-    setInput(""); setDeadline(null); setPriority("none"); setShowCal(false);
+    setInput(""); setDeadline(null); setPriority("none"); setRepeat(null); setShowCal(false); setShowRepeat(false);
     inputRef.current?.focus();
-  }, [input, selectedTag, priority, deadline]);
+  }, [input, selectedTag, priority, deadline, repeat]);
 
   const toggleTodo = async id => {
-    const todo = todos.find(t => t.id === id);
+    const todo = todos.find(td => td.id === id);
     await (todo?.done ? haptics.light() : haptics.success());
     setAnimId(id); setTimeout(() => setAnimId(null), 400);
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+
+    // 繰り返しタスクを完了したとき次回分を追加
+    if (todo && !todo.done && todo.repeat) {
+      const nextDeadline = calcNextDeadline(todo.repeat, todo.deadline || Date.now());
+      const nextTodo = {
+        ...todo,
+        id: nextId.current++,
+        done: false,
+        deadline: nextDeadline,
+        createdAt: Date.now(),
+      };
+      setTodos(prev => [nextTodo, ...prev.map(td => td.id === id ? { ...td, done: true } : td)]);
+    } else {
+      setTodos(prev => prev.map(td => td.id === id ? { ...td, done: !td.done } : td));
+    }
   };
 
   const deleteTodo = async id => {
     await haptics.medium();
     if (notifMap.current[id]) { await cancelNotification(notifMap.current[id]); delete notifMap.current[id]; }
-    setTodos(prev => prev.filter(t => t.id !== id));
+    setTodos(prev => prev.filter(td => td.id !== id));
   };
 
   const saveEdit = async updated => {
     await haptics.success();
-    setTodos(prev => prev.map(t => t.id === updated.id ? updated : t));
+    setTodos(prev => prev.map(td => td.id === updated.id ? updated : td));
     setEditTodo(null);
   };
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const getTag = id => tags.find(tg => tg.id === id);
-  const filtered = todos
-    .filter(t => (filter === "all" || t.tagId === filter) && (showDone || !t.done))
+
+  // サイドビューフィルタ
+  const applyViewFilter = (todoList) => {
+    switch (sideView) {
+      case "inbox":    return todoList.filter(td => isCreatedToday(td.createdAt));
+      case "today":    return todoList.filter(td => isToday(td.deadline));
+      case "tomorrow": return todoList.filter(td => isTomorrow(td.deadline));
+      case "week":     return todoList.filter(td => isThisWeek(td.deadline));
+      default:         return todoList;
+    }
+  };
+
+  const filtered = applyViewFilter(todos)
+    .filter(td => (filter === "all" || td.tagId === filter) && (showDone || !td.done))
     .sort((a, b) => {
       if (sortBy === "priority") return (PRIORITY_CONFIG[a.priority||"none"].order) - (PRIORITY_CONFIG[b.priority||"none"].order);
       if (sortBy === "deadline") {
@@ -552,18 +868,21 @@ export default function TodoApp() {
       return b.createdAt - a.createdAt;
     });
 
-  const doneCount  = todos.filter(t => t.done).length;
+  const doneCount  = todos.filter(td => td.done).length;
   const totalCount = todos.length;
   const progress   = totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100);
+
+  const viewLabel = {
+    inbox: "📥 受信箱", all: "📋 すべてのタスク", today: "📅 今日", tomorrow: "🌅 明日", week: "📆 今週"
+  }[sideView] || "すべてのタスク";
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{
       minHeight: "100svh", background: t.bg,
-      display: "flex", alignItems: "flex-start", justifyContent: "center",
+      display: "flex",
       fontFamily: "'Noto Sans JP','Hiragino Sans',sans-serif",
-      padding: `16px 12px ${32 + kbHeight}px`,
-      transition: "background 0.3s, padding-bottom 0.25s",
+      transition: "background 0.3s",
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap');
@@ -581,41 +900,75 @@ export default function TodoApp() {
         button{cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;}
         input,textarea,select{font-family:inherit;}
         input:focus,textarea:focus,select:focus{outline:none;}
+        .sidebar-panel{display:flex;}
+        @media (max-width:767px){
+          .sidebar-panel{
+            position:fixed;left:0;top:0;bottom:0;z-index:100;
+            transform:translateX(-100%);
+          }
+          .sidebar-panel.open{transform:translateX(0);}
+          .sidebar-overlay{display:block!important;}
+        }
       `}</style>
 
       {showTagEd && <TagEditorModal tags={tags} onClose={() => setShowTagEd(false)} onSave={tgs => { setTags(tgs); setShowTagEd(false); }} theme={t}/>}
       {editTodo  && <TodoDetailModal todo={editTodo} tags={tags} onClose={() => setEditTodo(null)} onSave={saveEdit} theme={t}/>}
+      {showLocModal && userLoc && <LocationModal lat={userLoc.lat} lng={userLoc.lng} onClose={() => setShowLocModal(false)} theme={t}/>}
       <Assistant todos={todos} onDismiss={() => setNotification(null)} notification={notification}/>
 
-      <div style={{ width:"100%", maxWidth:480, background:t.card, borderRadius:24, overflow:"hidden", boxShadow:"0 32px 80px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.04)", transition:"background 0.3s" }}>
+      {/* Sidebar */}
+      <div className={`sidebar-panel${sidebarOpen ? " open" : ""}`}>
+        <Sidebar
+          todos={todos}
+          currentView={sideView}
+          onViewChange={setSideView}
+          themeId={themeId}
+          onThemeChange={setThemeId}
+          theme={t}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+        />
+      </div>
+      {/* Overlay */}
+      {sidebarOpen && (
+        <div onClick={() => setSidebarOpen(false)} style={{ position:"fixed",inset:0,zIndex:90,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(2px)" }} className="sidebar-overlay"/>
+      )}
+
+      {/* Main content */}
+      <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", minHeight:"100svh", paddingBottom: kbHeight }}>
 
         {/* Header */}
-        <div style={{ padding:"20px 20px 14px", background:t.headerCard, borderBottom:`1px solid ${t.border}` }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10, flexWrap:"wrap", gap:8 }}>
-            <div>
-              <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:t.sub, letterSpacing:3, marginBottom:2 }}>MY TASKS</div>
-              <h1 style={{ fontSize:22, fontWeight:700, color:t.text, letterSpacing:-0.5, lineHeight:1 }}>
-                それな！<span style={{ color:"#7c6af7" }}>Todo</span>
-              </h1>
-            </div>
-            <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                <PaletteIcon/>
-                <ThemeSwitcher currentThemeId={themeId} onChange={setThemeId}/>
-              </div>
-              <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
-                <span style={{ fontFamily:"'Space Mono',monospace", fontSize:20, fontWeight:700, color:"#7c6af7", lineHeight:1 }}>{progress}<span style={{ fontSize:10,color:t.subDim }}>%</span></span>
-                <span style={{ fontSize:11,color:t.sub }}>{doneCount}/{totalCount} 完了</span>
-              </div>
-            </div>
+        <div style={{ padding:"16px 20px 12px", background:t.headerCard, borderBottom:`1px solid ${t.border}`, display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:50 }}>
+          {/* Hamburger (mobile) */}
+          <button onClick={() => setSidebarOpen(v=>!v)}
+            style={{ background:t.chipOff, border:"none", borderRadius:8, color:t.sub, padding:"8px 10px", fontSize:18, display:"none", alignItems:"center", justifyContent:"center", flexShrink:0 }}
+            className="hamburger-btn">
+            ≡
+          </button>
+          <div style={{ flex:1 }}>
+            <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:t.sub, letterSpacing:2, marginBottom:1 }}>CURRENT VIEW</div>
+            <div style={{ fontSize:16, fontWeight:700, color:t.text }}>{viewLabel}</div>
           </div>
-          <div style={{ height:4, background:isLight?"rgba(0,0,0,0.08)":"#252530", borderRadius:4, overflow:"hidden" }}>
-            <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#7c6af7,#a78bfa)", borderRadius:4, transition:"width 0.5s cubic-bezier(.4,0,.2,1)" }}/>
+          {/* Progress */}
+          <div style={{ display:"flex", alignItems:"baseline", gap:4, flexShrink:0 }}>
+            <span style={{ fontFamily:"'Space Mono',monospace", fontSize:18, fontWeight:700, color:"#7c6af7" }}>{progress}<span style={{ fontSize:9,color:t.subDim }}>%</span></span>
+            <span style={{ fontSize:11,color:t.sub }}>{doneCount}/{totalCount}</span>
           </div>
+          {/* Location button */}
+          <button onClick={handleLocationClick}
+            title="近所の安売り情報"
+            style={{ background: userLoc ? "rgba(124,106,247,0.15)" : t.chipOff, border:"none", borderRadius:9, color: userLoc ? "#a78bfa" : t.sub, padding:"8px 10px", fontSize:16, display:"flex", alignItems:"center", flexShrink:0 }}>
+            {locLoading ? "⌛" : "📍"}
+          </button>
         </div>
 
-        {/* Input */}
-        <div style={{ padding:"14px 14px 10px", borderBottom:`1px solid ${t.border}` }}>
+        {/* Progress bar */}
+        <div style={{ height:3, background:isLight?"rgba(0,0,0,0.06)":"#1e1e28" }}>
+          <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#7c6af7,#a78bfa)", transition:"width 0.5s cubic-bezier(.4,0,.2,1)" }}/>
+        </div>
+
+        {/* Input area */}
+        <div style={{ padding:"14px 16px 10px", borderBottom:`1px solid ${t.border}`, background:t.card }}>
           <div style={{ display:"flex", gap:8, background:t.inputBg, borderRadius:14, padding:"4px 6px 4px 14px", border:`1px solid ${t.inputBorder}`, alignItems:"center" }}>
             <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTodo()}
               placeholder={listening?"聞いています…":"新しいタスクを入力…"} enterKeyHint="done"
@@ -627,6 +980,11 @@ export default function TodoApp() {
             <button onClick={()=>setShowCal(v=>!v)}
               style={{ background:deadline?"rgba(124,106,247,0.2)":t.chipOff,border:"none",borderRadius:9,color:deadline?"#a78bfa":t.sub,padding:"9px 10px",display:"flex",alignItems:"center",flexShrink:0 }}>
               <CalIcon size={15}/>
+            </button>
+            <button onClick={()=>setShowRepeat(v=>!v)}
+              style={{ background:repeat?"rgba(124,106,247,0.2)":t.chipOff,border:"none",borderRadius:9,color:repeat?"#a78bfa":t.sub,padding:"9px 10px",display:"flex",alignItems:"center",flexShrink:0 }}
+              title="繰り返し設定">
+              <RepeatIcon size={15}/>
             </button>
             <button onClick={addTodo}
               style={{ background:"linear-gradient(135deg,#7c6af7,#a78bfa)",color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:13,fontWeight:700,whiteSpace:"nowrap",flexShrink:0 }}>
@@ -642,6 +1000,16 @@ export default function TodoApp() {
                   <CalIcon size={12}/><span style={{ fontSize:12,color:"#a78bfa" }}>締め切り: {fmtDate(deadline)}</span>
                   <button onClick={()=>setDeadline(null)} style={{ background:"transparent",border:"none",color:t.sub,marginLeft:"auto",display:"flex",padding:2 }}><XIcon size={12}/></button>
                 </div>
+              )}
+            </div>
+          )}
+
+          {showRepeat && (
+            <div style={{ marginTop:8, padding:"10px 12px", background:t.inputBg, borderRadius:12, border:`1px solid ${t.inputBorder}` }}>
+              <div style={{ fontSize:11, color:t.sub, fontWeight:600, marginBottom:8 }}>🔁 繰り返し</div>
+              <RepeatPicker value={repeat} onChange={setRepeat} theme={t}/>
+              {repeat && (
+                <div style={{ marginTop:6, fontSize:12, color:"#a78bfa" }}>🔁 {getRepeatLabel(repeat)}</div>
               )}
             </div>
           )}
@@ -665,7 +1033,7 @@ export default function TodoApp() {
         </div>
 
         {/* Filter + Sort */}
-        <div style={{ padding:"9px 12px",display:"flex",gap:5,alignItems:"center",borderBottom:`1px solid ${t.border}`,overflowX:"auto" }}>
+        <div style={{ padding:"9px 12px",display:"flex",gap:5,alignItems:"center",borderBottom:`1px solid ${t.border}`,overflowX:"auto",background:t.card }}>
           {[{id:"all",label:"すべて"},...tags].map(tg=>(
             <button key={tg.id} onClick={()=>setFilter(tg.id)}
               style={{ background:filter===tg.id?"rgba(124,106,247,0.18)":"transparent",color:filter===tg.id?"#a78bfa":t.sub,border:filter===tg.id?"1px solid rgba(124,106,247,0.35)":"1px solid transparent",borderRadius:8,padding:"4px 11px",fontSize:12,fontWeight:500,whiteSpace:"nowrap" }}>{tg.label}</button>
@@ -679,7 +1047,7 @@ export default function TodoApp() {
         </div>
 
         {/* Todo list */}
-        <div style={{ maxHeight:"min(420px,50vh)",overflowY:"auto",padding:"10px 10px 16px" }}>
+        <div style={{ flex:1, overflowY:"auto", padding:"10px 16px 24px", background:t.card }}>
           {filtered.length===0 && <div style={{ textAlign:"center",color:t.subDim,fontSize:13,padding:"36px 0" }}>タスクがありません 🎉</div>}
           {filtered.map(todo=>{
             const tag    = getTag(todo.tagId);
@@ -687,6 +1055,8 @@ export default function TodoApp() {
             const pConf  = PRIORITY_CONFIG[todo.priority||"none"];
             const overdue   = !todo.done && isPast(todo.deadline);
             const todayDue  = !todo.done && isToday(todo.deadline) && !overdue;
+            const repeatLabel = getRepeatLabel(todo.repeat);
+            const showGrocery = userLoc && isGrocery(todo.text);
             return (
               <div key={todo.id} className={`todo-item slide-in${animId===todo.id?" pop":""}`} style={{
                 display:"flex",alignItems:"flex-start",gap:10,
@@ -700,11 +1070,21 @@ export default function TodoApp() {
                   <CheckIcon done={todo.done}/>
                 </button>
                 <div style={{ flex:1,minWidth:0 }}>
-                  <div style={{ fontSize:14,color:todo.done?t.sub:t.text,textDecoration:todo.done?"line-through":"none",wordBreak:"break-word",lineHeight:1.5 }}>{todo.text}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                    <span style={{ fontSize:14,color:todo.done?t.sub:t.text,textDecoration:todo.done?"line-through":"none",wordBreak:"break-word",lineHeight:1.5 }}>{todo.text}</span>
+                    {showGrocery && (
+                      <span style={{ fontSize:10, background:"rgba(251,146,60,0.2)", color:"#fb923c", borderRadius:5, padding:"1px 6px", fontWeight:700, flexShrink:0 }}>🛒</span>
+                    )}
+                  </div>
                   <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5,alignItems:"center" }}>
                     {tag && <span style={{ fontSize:10,fontWeight:600,color,background:`${color}18`,borderRadius:5,padding:"1px 7px" }}>{tag.label}</span>}
                     {todo.priority&&todo.priority!=="none"&&<span style={{ fontSize:10,fontWeight:700,color:pConf.color,background:pConf.bg,borderRadius:5,padding:"1px 7px" }}>{pConf.label}優先</span>}
                     {todo.deadline&&<span style={{ fontSize:10,color:overdue?"#f87171":todayDue?"#fbbf24":t.sub,display:"flex",alignItems:"center",gap:3 }}><ClockIcon/>{fmtDate(todo.deadline)}{overdue?" 期限切れ":todayDue?" 今日期限":""}</span>}
+                    {repeatLabel && (
+                      <span style={{ fontSize:10, color:"#a78bfa", display:"flex", alignItems:"center", gap:2 }}>
+                        <RepeatIcon size={10}/> {repeatLabel}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div style={{ display:"flex",gap:4,flexShrink:0,marginTop:1 }}>
@@ -717,14 +1097,21 @@ export default function TodoApp() {
         </div>
 
         {/* Footer */}
-        <div style={{ padding:"10px 16px 14px",borderTop:`1px solid ${t.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-          <span style={{ fontSize:11,color:t.subDim,fontFamily:"'Space Mono',monospace" }}>{todos.filter(t=>!t.done).length} tasks left</span>
+        <div style={{ padding:"10px 16px 14px",borderTop:`1px solid ${t.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:t.card }}>
+          <span style={{ fontSize:11,color:t.subDim,fontFamily:"'Space Mono',monospace" }}>{todos.filter(td=>!td.done).length} tasks left</span>
           <div style={{ display:"flex",gap:4,alignItems:"center" }}>
             <button onClick={()=>setShowDone(v=>!v)} style={{ background:"transparent",border:"none",color:showDone?t.subDim:"#a78bfa",fontSize:11,padding:"3px 6px",borderRadius:6 }}>{showDone?"完了を隠す":"完了を表示"}</button>
-            {doneCount>0&&<button onClick={async()=>{await haptics.medium();setTodos(p=>p.filter(t=>!t.done));}} style={{ background:"transparent",border:"none",color:t.subDim,fontSize:11,padding:"3px 6px",borderRadius:6 }} onMouseEnter={e=>e.target.style.color="#f87171"} onMouseLeave={e=>e.target.style.color=t.subDim}>完了済みを削除</button>}
+            {doneCount>0&&<button onClick={async()=>{await haptics.medium();setTodos(p=>p.filter(td=>!td.done));}} style={{ background:"transparent",border:"none",color:t.subDim,fontSize:11,padding:"3px 6px",borderRadius:6 }} onMouseEnter={e=>e.target.style.color="#f87171"} onMouseLeave={e=>e.target.style.color=t.subDim}>完了済みを削除</button>}
           </div>
         </div>
       </div>
+
+      {/* Hamburger btn (mobile) - inject via style */}
+      <style>{`
+        @media (max-width:767px){
+          .hamburger-btn{display:flex!important;}
+        }
+      `}</style>
     </div>
   );
 }
