@@ -177,6 +177,13 @@ const RepeatIcon = ({ size=12 }) => (
     <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/>
   </svg>
 );
+const SplitIcon = () => (
+  <svg viewBox="0 0 20 16" width="20" height="16" fill="currentColor">
+    <rect x="0" y="0"   width="20" height="3" rx="1.5"/>
+    <rect x="0" y="6.5" width="20" height="3" rx="1.5"/>
+    <rect x="0" y="13"  width="20" height="3" rx="1.5"/>
+  </svg>
+);
 
 // ─── Mini Calendar ─────────────────────────────────────────────────────────────
 function MiniCalendar({ value, onChange, theme }) {
@@ -549,26 +556,55 @@ function ThemeSwitcher({ currentThemeId, onChange }) {
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
-function Sidebar({ todos, currentView, onViewChange, themeId, onThemeChange, theme, isOpen, onClose }) {
+function Sidebar({ todos, currentView, onViewChange, themeId, onThemeChange, theme, isOpen, onClose, splitView }) {
   const t = theme;
   const isLight = t.isLight;
 
-  const now = new Date();
   const counts = {
-    inbox:   todos.filter(td => isCreatedToday(td.createdAt) && !td.done).length,
-    all:     todos.filter(td => !td.done).length,
-    today:   todos.filter(td => isToday(td.deadline) && !td.done).length,
-    tomorrow:todos.filter(td => isTomorrow(td.deadline) && !td.done).length,
-    week:    todos.filter(td => isThisWeek(td.deadline) && !td.done).length,
+    all:      todos.filter(td => !td.done).length,
+    today:    todos.filter(td => isToday(td.deadline) && !td.done).length,
+    tomorrow: todos.filter(td => isTomorrow(td.deadline) && !td.done).length,
+    week:     todos.filter(td => isThisWeek(td.deadline) && !td.done).length,
+    personal: todos.filter(td => td.tagId === "personal" && !td.done).length,
+    work:     todos.filter(td => td.tagId === "work" && !td.done).length,
   };
 
-  const navItems = [
-    { id: "inbox",    label: "受信箱",       emoji: "📥", count: counts.inbox },
+  const dateItems = [
     { id: "all",      label: "すべてのタスク", emoji: "📋", count: counts.all },
-    { id: "today",    label: "今日",          emoji: "📅", count: counts.today },
-    { id: "tomorrow", label: "明日",          emoji: "🌅", count: counts.tomorrow },
-    { id: "week",     label: "今週",          emoji: "📆", count: counts.week },
+    { id: "today",    label: "今日",           emoji: "📅", count: counts.today },
+    { id: "tomorrow", label: "明日",           emoji: "🌅", count: counts.tomorrow },
+    { id: "week",     label: "今週",           emoji: "📆", count: counts.week },
   ];
+  const tagItems = [
+    { id: "personal", label: "個人",  emoji: "👤", count: counts.personal },
+    { id: "work",     label: "仕事",  emoji: "💼", count: counts.work },
+  ];
+
+  const NavBtn = ({ item }) => (
+    <button
+      onClick={() => { onViewChange(item.id); onClose(); }}
+      style={{
+        width:"100%", display:"flex", alignItems:"center", gap:10,
+        padding:"9px 12px", borderRadius:10, border:"none", cursor:"pointer",
+        fontFamily:"inherit", fontSize:13, fontWeight: currentView===item.id ? 700 : 400,
+        background: currentView===item.id
+          ? isLight ? "rgba(124,106,247,0.12)" : "rgba(124,106,247,0.15)"
+          : "transparent",
+        color: currentView===item.id ? "#a78bfa" : t.sub,
+        marginBottom:2, textAlign:"left", transition:"background 0.15s",
+      }}
+    >
+      <span style={{ fontSize:16 }}>{item.emoji}</span>
+      <span style={{ flex:1 }}>{item.label}</span>
+      {item.count > 0 && (
+        <span style={{
+          background: currentView===item.id ? "rgba(124,106,247,0.3)" : isLight?"rgba(0,0,0,0.1)":"rgba(255,255,255,0.08)",
+          color: currentView===item.id ? "#a78bfa" : t.subDim,
+          borderRadius:10, padding:"1px 7px", fontSize:11, fontWeight:700, minWidth:20, textAlign:"center",
+        }}>{item.count}</span>
+      )}
+    </button>
+  );
 
   return (
     <>
@@ -581,13 +617,13 @@ function Sidebar({ todos, currentView, onViewChange, themeId, onThemeChange, the
         />
       )}
       <div style={{
-        width: 240, flexShrink: 0,
+        width: splitView ? "66.67vw" : 240, flexShrink: 0,
         background: t.sidebarBg,
         borderRight: `1px solid ${t.sidebarBorder}`,
         display: "flex", flexDirection: "column",
         height: "100vh", position: "sticky", top: 0,
         overflowY: "auto",
-        transition: "transform 0.25s cubic-bezier(.4,0,.2,1)",
+        transition: "width 0.3s cubic-bezier(.4,0,.2,1)",
       }} className="sidebar-panel">
         {/* App name */}
         <div style={{ padding:"24px 20px 16px", borderBottom:`1px solid ${t.sidebarBorder}` }}>
@@ -599,32 +635,11 @@ function Sidebar({ todos, currentView, onViewChange, themeId, onThemeChange, the
 
         {/* Navigation */}
         <nav style={{ padding:"12px 10px", flex:1 }}>
-          {navItems.map(item => (
-            <button
-              key={item.id}
-              onClick={() => { onViewChange(item.id); onClose(); }}
-              style={{
-                width:"100%", display:"flex", alignItems:"center", gap:10,
-                padding:"9px 12px", borderRadius:10, border:"none", cursor:"pointer",
-                fontFamily:"inherit", fontSize:13, fontWeight: currentView===item.id ? 700 : 400,
-                background: currentView===item.id
-                  ? isLight ? "rgba(124,106,247,0.12)" : "rgba(124,106,247,0.15)"
-                  : "transparent",
-                color: currentView===item.id ? "#a78bfa" : t.sub,
-                marginBottom:2, textAlign:"left", transition:"background 0.15s",
-              }}
-            >
-              <span style={{ fontSize:16 }}>{item.emoji}</span>
-              <span style={{ flex:1 }}>{item.label}</span>
-              {item.count > 0 && (
-                <span style={{
-                  background: currentView===item.id ? "rgba(124,106,247,0.3)" : isLight?"rgba(0,0,0,0.1)":"rgba(255,255,255,0.08)",
-                  color: currentView===item.id ? "#a78bfa" : t.subDim,
-                  borderRadius:10, padding:"1px 7px", fontSize:11, fontWeight:700, minWidth:20, textAlign:"center",
-                }}>{item.count}</span>
-              )}
-            </button>
-          ))}
+          {dateItems.map(item => <NavBtn key={item.id} item={item}/>)}
+          {/* Tag-based views */}
+          <div style={{ height:1, background:t.sidebarBorder, margin:"8px 4px" }}/>
+          <div style={{ fontSize:10, color:t.subDim, fontWeight:700, letterSpacing:1.5, padding:"4px 12px 4px", textTransform:"uppercase" }}>カテゴリ</div>
+          {tagItems.map(item => <NavBtn key={item.id} item={item}/>)}
         </nav>
 
         {/* Theme switcher */}
@@ -665,10 +680,14 @@ export default function TodoApp() {
   // Sidebar view
   const [sideView,    setSideView]    = useState("all");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [splitView,   setSplitView]   = useState(false);
   // Location
   const [userLoc,     setUserLoc]     = useState(null);
   const [locLoading,  setLocLoading]  = useState(false);
   const [showLocModal,setShowLocModal]= useState(false);
+  // Quick-add FAB
+  const [showFab,     setShowFab]     = useState(false);
+  const fabInputRef   = useRef(null);
 
   const inputRef    = useRef(null);
   const nextId      = useRef(10);
@@ -852,16 +871,22 @@ export default function TodoApp() {
     setEditTodo(null);
   };
 
+  // FAB auto-focus
+  useEffect(() => {
+    if (showFab) setTimeout(() => fabInputRef.current?.focus(), 60);
+  }, [showFab]);
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const getTag = id => tags.find(tg => tg.id === id);
 
   // サイドビューフィルタ
   const applyViewFilter = (todoList) => {
     switch (sideView) {
-      case "inbox":    return todoList.filter(td => isCreatedToday(td.createdAt));
       case "today":    return todoList.filter(td => isToday(td.deadline));
       case "tomorrow": return todoList.filter(td => isTomorrow(td.deadline));
       case "week":     return todoList.filter(td => isThisWeek(td.deadline));
+      case "personal": return todoList.filter(td => td.tagId === "personal");
+      case "work":     return todoList.filter(td => td.tagId === "work");
       default:         return todoList;
     }
   };
@@ -883,8 +908,9 @@ export default function TodoApp() {
   const progress   = totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100);
 
   const viewLabel = {
-    inbox: "📥 受信箱", all: "📋 すべてのタスク", today: "📅 今日", tomorrow: "🌅 明日", week: "📆 今週"
-  }[sideView] || "すべてのタスク";
+    all: "📋 すべてのタスク", today: "📅 今日", tomorrow: "🌅 明日", week: "📆 今週",
+    personal: "👤 個人", work: "💼 仕事",
+  }[sideView] || "📋 すべてのタスク";
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -912,6 +938,7 @@ export default function TodoApp() {
         input:focus,textarea:focus,select:focus{outline:none;}
         .sidebar-panel{display:flex;}
         .hamburger-btn{display:none;}
+        .split-btn{display:flex;}
         @media (max-width:767px){
           .sidebar-panel{display:none!important;}
           .sidebar-panel.open{
@@ -920,6 +947,7 @@ export default function TodoApp() {
           }
           .sidebar-overlay{display:block!important;}
           .hamburger-btn{display:flex!important;}
+          .split-btn{display:none!important;}
         }
       `}</style>
 
@@ -939,6 +967,7 @@ export default function TodoApp() {
           theme={t}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          splitView={splitView}
         />
       </div>
       {/* Overlay */}
@@ -951,11 +980,18 @@ export default function TodoApp() {
 
         {/* Header */}
         <div style={{ padding:"16px 20px 12px", background:t.headerCard, borderBottom:`1px solid ${t.border}`, display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:50 }}>
-          {/* Hamburger (mobile) */}
+          {/* Hamburger (mobile only) */}
           <button onClick={() => setSidebarOpen(v=>!v)}
             style={{ background:t.chipOff, border:"none", borderRadius:8, color:t.sub, padding:"8px 10px", fontSize:18, display:"none", alignItems:"center", justifyContent:"center", flexShrink:0 }}
             className="hamburger-btn">
             ≡
+          </button>
+          {/* Split-view toggle (desktop only) */}
+          <button onClick={() => setSplitView(v=>!v)}
+            title={splitView ? "サイドバーを縮む" : "サイドバーを広げる"}
+            style={{ background: splitView ? "rgba(124,106,247,0.18)" : t.chipOff, border: splitView ? "1px solid rgba(124,106,247,0.4)" : "1px solid transparent", borderRadius:8, color: splitView ? "#a78bfa" : t.sub, padding:"8px 10px", display:"none", alignItems:"center", justifyContent:"center", flexShrink:0 }}
+            className="split-btn">
+            <SplitIcon/>
           </button>
           <div style={{ flex:1 }}>
             <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:t.sub, letterSpacing:2, marginBottom:1 }}>CURRENT VIEW</div>
@@ -1149,6 +1185,68 @@ export default function TodoApp() {
           </div>
         </div>
       </div>
+
+      {/* ── Floating Action Button ── */}
+      <button
+        onClick={() => setShowFab(v => !v)}
+        style={{
+          position:"fixed", bottom:24, left:20, zIndex:140,
+          width:56, height:56, borderRadius:"50%",
+          background: showFab ? "linear-gradient(135deg,#374151,#4b5563)" : "linear-gradient(135deg,#ef4444,#f87171)",
+          color:"#fff", border:"none",
+          fontSize: showFab ? 22 : 28, fontWeight:300,
+          display:"flex", alignItems:"center", justifyContent:"center",
+          boxShadow: showFab ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 16px rgba(239,68,68,0.5)",
+          transition:"all 0.2s cubic-bezier(.4,0,.2,1)",
+          transform: showFab ? "rotate(45deg)" : "rotate(0deg)",
+        }}
+        title="タスクを追加">
+        ＋
+      </button>
+
+      {/* ── Quick-Add Bottom Sheet ── */}
+      {showFab && (
+        <div
+          style={{ position:"fixed",inset:0,zIndex:130,background:"rgba(0,0,0,0.4)",backdropFilter:"blur(3px)" }}
+          onClick={() => setShowFab(false)}>
+          <div
+            style={{
+              position:"absolute", bottom:0, left:0, right:0,
+              background:t.card, borderRadius:"20px 20px 0 0",
+              padding:"20px 16px", paddingBottom: Math.max(kbHeight + 12, 20),
+              boxShadow:"0 -8px 40px rgba(0,0,0,0.3)",
+              border:`1px solid ${t.border}`,
+            }}
+            onClick={e => e.stopPropagation()}>
+            {/* Drag handle */}
+            <div style={{ width:36,height:4,background:t.border,borderRadius:2,margin:"0 auto 16px" }}/>
+            <div style={{ fontSize:13,fontWeight:700,color:t.sub,marginBottom:12,letterSpacing:0.5 }}>新しいタスクを追加</div>
+            <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+              <input
+                ref={fabInputRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key==="Enter" && input.trim()) { addTodo(); setShowFab(false); } }}
+                placeholder="タスクを入力…"
+                style={{ flex:1, background:t.inputBg, border:`1px solid ${t.inputBorder}`, borderRadius:12, padding:"12px 14px", color:t.text, fontSize:15, fontFamily:"inherit" }}
+              />
+              <button
+                onClick={() => { if (input.trim()) { addTodo(); setShowFab(false); } }}
+                style={{ background:"linear-gradient(135deg,#ef4444,#f87171)", color:"#fff", border:"none", borderRadius:12, padding:"0 18px", fontSize:15, fontWeight:700, whiteSpace:"nowrap" }}>
+                追加
+              </button>
+            </div>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {tags.map(tg => (
+                <button key={tg.id} onClick={() => setSelectedTag(tg.id)}
+                  style={{ background:selectedTag===tg.id?tg.color:t.chipOff, color:selectedTag===tg.id?"#111":t.chipOffText, border:"none", borderRadius:8, padding:"6px 14px", fontSize:12, fontWeight:600, fontFamily:"inherit" }}>
+                  {tg.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
