@@ -91,34 +91,11 @@ export async function cancelNotification(id) {
 
 // ── Speech Recognition ────────────────────────────────────────────────────────
 export async function requestSpeechPermission() {
-  if (!isNative()) return true;
-  try {
-    const { SpeechRecognition } = await import('@capacitor/speech-recognition');
-    const { speechRecognition } = await SpeechRecognition.requestPermissions();
-    return speechRecognition === 'granted';
-  } catch { return false; }
+  return true; // Web Speech API requires no explicit permission request
 }
 
 export function startListening({ onResult, onEnd, onError }) {
-  if (isNative()) return startNativeSpeech({ onResult, onEnd, onError });
   return startWebSpeech({ onResult, onEnd, onError });
-}
-
-async function startNativeSpeech({ onResult, onEnd, onError }) {
-  let stopped = false;
-  try {
-    const { SpeechRecognition } = await import('@capacitor/speech-recognition');
-    await SpeechRecognition.start({ language: 'ja-JP', maxResults: 1, partialResults: false, popup: false });
-    const handle = await SpeechRecognition.addListener('partialResults', (data) => {
-      if (data?.matches?.[0]) onResult(data.matches[0]);
-    });
-    return async () => {
-      if (stopped) return; stopped = true;
-      try { await SpeechRecognition.stop(); } catch {}
-      handle?.remove?.();
-      onEnd?.();
-    };
-  } catch (e) { onError?.(e); onEnd?.(); return () => {}; }
 }
 
 function startWebSpeech({ onResult, onEnd, onError }) {
