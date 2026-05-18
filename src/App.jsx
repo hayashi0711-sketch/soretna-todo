@@ -25,12 +25,11 @@ const GROCERY_KEYWORDS = ['牛乳','卵','たまご','野菜','肉','魚','パ�
 
 const WEEKDAY_LABELS = ["日","月","火","水","木","金","土"];
 
-const PRICE_OPTIONS = ["","10","20","30","50","80","100","150","200","250","300","400","500","700","1000","1500","2000","3000","5000","10000"];
 const fmtPrice = p => !p ? "" : (p.includes("円") ? p : p + "円");
 
 // 繰り返しラベル
 const REPEAT_LABELS = {
-  daily:           "毎日",
+  daily:           (h) => h != null ? `毎日 ${h}時` : "毎日",
   days:            (d) => `${d}日ごと`,
   weekly:          "毎週",
   "weekly-days":   (wds) => `毎週${wds.map(d => WEEKDAY_LABELS[d]).join("・")}`,
@@ -41,6 +40,7 @@ const REPEAT_LABELS = {
 
 function getRepeatLabel(repeat) {
   if (!repeat) return null;
+  if (repeat.type === "daily") return repeat.hour != null ? `毎日 ${repeat.hour}時` : "毎日";
   const base = REPEAT_LABELS[repeat.type];
   if (typeof base === "function") {
     if (repeat.type === "weekly-days") return base(repeat.weekdays || [1]);
@@ -55,6 +55,7 @@ function calcNextDeadline(repeat, fromDate) {
   switch (repeat.type) {
     case "daily":
       d.setDate(d.getDate() + 1);
+      if (repeat.hour != null) d.setHours(repeat.hour, 0, 0, 0);
       break;
     case "days":
       d.setDate(d.getDate() + (repeat.days || 1));
@@ -197,6 +198,103 @@ const RepeatIcon = ({ size=12 }) => (
   </svg>
 );
 
+// ─── WheelPicker ───────────────────────────────────────────────────────────────
+function WheelPicker({ items, value, onChange, width=80, visibleCount=5, theme }) {
+  const ITEM_H = 44;
+  const PAD = Math.floor(visibleCount / 2);
+  const listRef = useRef(null);
+  const t = theme;
+  const selIdx = Math.max(0, items.findIndex(it => String(it.value) === String(value)));
+
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = selIdx * ITEM_H;
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    if (!listRef.current) return;
+    const idx = Math.round(listRef.current.scrollTop / ITEM_H);
+    const cl = Math.max(0, Math.min(items.length - 1, idx));
+    if (items[cl] && String(items[cl].value) !== String(value)) onChange(items[cl].value);
+  }, [items, value, onChange]);
+
+  const padded = [...Array(PAD).fill(null), ...items, ...Array(PAD).fill(null)];
+  const totalH = visibleCount * ITEM_H;
+
+  return (
+    <div style={{ position:"relative", width, height:totalH, borderRadius:12,
+      background:t.isLight?"rgba(0,0,0,0.05)":"rgba(255,255,255,0.04)", overflow:"hidden" }}>
+      <div style={{ position:"absolute", top:PAD*ITEM_H, left:0, right:0, height:ITEM_H,
+        background:"rgba(124,106,247,0.15)", zIndex:2, pointerEvents:"none",
+        borderTop:"1px solid rgba(124,106,247,0.35)", borderBottom:"1px solid rgba(124,106,247,0.35)" }}/>
+      <div style={{ position:"absolute", top:0, left:0, right:0, height:PAD*ITEM_H,
+        background:`linear-gradient(to bottom,${t.card}f0,transparent)`, zIndex:3, pointerEvents:"none" }}/>
+      <div style={{ position:"absolute", bottom:0, left:0, right:0, height:PAD*ITEM_H,
+        background:`linear-gradient(to top,${t.card}f0,transparent)`, zIndex:3, pointerEvents:"none" }}/>
+      <div ref={listRef} onScroll={handleScroll} className="wheel-list" style={{
+        height:"100%", overflowY:"scroll", scrollSnapType:"y mandatory",
+        WebkitOverflowScrolling:"touch" }}>
+        {padded.map((item, i) => (
+          <div key={i} style={{
+            height:ITEM_H, display:"flex", alignItems:"center", justifyContent:"center",
+            scrollSnapAlign:"start", fontSize:16, fontWeight:item?600:400,
+            color:item?t.text:"transparent", userSelect:"none" }}>
+            {item?.label ?? ""}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── PriceWheelPicker ─────────────────────────────────────────────────────────
+function PriceWheelPicker({ value, onChange, theme }) {
+  const numVal = parseInt(value || "0", 10);
+  const initH = Math.min(10, Math.floor(numVal / 100));
+  const initT = initH >= 10 ? 0 : Math.floor((numVal % 100) / 10);
+  const initO = initH >= 10 ? 0 : numVal % 10;
+  const [hVal, setHVal] = useState(initH);
+  const [tVal, setTVal] = useState(initT);
+  const [oVal, setOVal] = useState(initO);
+  const t = theme;
+
+  const emit = (h, tv, o) => {
+    const total = h >= 10 ? 1000 : h * 100 + tv * 10 + o;
+    onChange(total === 0 ? "" : String(total));
+  };
+
+  const locked = hVal >= 10;
+
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+      <div>
+        <div style={{ fontSize:10, color:t.sub, textAlign:"center", marginBottom:2 }}>百</div>
+        <WheelPicker
+          items={Array.from({length:11},(_,i)=>({value:i,label:i===10?"1K":String(i)}))}
+          value={hVal} visibleCount={3} width={54} theme={t}
+          onChange={v => { const n=Number(v); setHVal(n); if(n>=10){setTVal(0);setOVal(0);} emit(n,n>=10?0:tVal,n>=10?0:oVal); }}
+        />
+      </div>
+      <div style={{ opacity: locked ? 0.3 : 1 }}>
+        <div style={{ fontSize:10, color:t.sub, textAlign:"center", marginBottom:2 }}>十</div>
+        <WheelPicker
+          items={Array.from({length:10},(_,i)=>({value:i,label:String(i)}))}
+          value={tVal} visibleCount={3} width={54} theme={t}
+          onChange={v => { if(locked) return; const n=Number(v); setTVal(n); emit(hVal,n,oVal); }}
+        />
+      </div>
+      <div style={{ opacity: locked ? 0.3 : 1 }}>
+        <div style={{ fontSize:10, color:t.sub, textAlign:"center", marginBottom:2 }}>一</div>
+        <WheelPicker
+          items={Array.from({length:10},(_,i)=>({value:i,label:String(i)}))}
+          value={oVal} visibleCount={3} width={54} theme={t}
+          onChange={v => { if(locked) return; const n=Number(v); setOVal(n); emit(hVal,tVal,n); }}
+        />
+      </div>
+      <span style={{ fontSize:18, color:t.sub, fontWeight:600, alignSelf:"center", marginTop:16 }}>円</span>
+    </div>
+  );
+}
+
 // ─── Mini Calendar ─────────────────────────────────────────────────────────────
 function MiniCalendar({ value, onChange, theme }) {
   const today = new Date();
@@ -263,22 +361,33 @@ function MiniCalendar({ value, onChange, theme }) {
           }}>{d||""}</div>
         ))}
       </div>
-      <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${t.border}`, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-        <ClockIcon/>
-        <span style={{ color: t.sub, fontSize:12 }}>時間:</span>
-        <select value={selHour} onChange={e=>updateTime(Number(e.target.value),selMin)}
-          style={{ background: isLight?"rgba(0,0,0,0.06)":"rgba(255,255,255,0.07)", border:`1px solid ${t.border}`, borderRadius:8, color: t.text, padding:"5px 8px", fontSize:13, outline:"none" }}>
-          {Array.from({length:24},(_,i)=><option key={i} value={i}>{String(i).padStart(2,"0")}</option>)}
-        </select>
-        <span style={{ color: t.sub }}>:</span>
-        <select value={selMin} onChange={e=>updateTime(selHour,Number(e.target.value))}
-          style={{ background: isLight?"rgba(0,0,0,0.06)":"rgba(255,255,255,0.07)", border:`1px solid ${t.border}`, borderRadius:8, color: t.text, padding:"5px 8px", fontSize:13, outline:"none" }}>
-          {[0,5,10,15,20,25,30,35,40,45,50,55].map(m=><option key={m} value={m}>{String(m).padStart(2,"0")}</option>)}
-        </select>
-        {selDate && <span style={{ fontSize:11, color:"#a78bfa", marginLeft:"auto" }}>✓ {viewMonth+1}/{selDate} {String(selHour).padStart(2,"0")}:{String(selMin).padStart(2,"0")}</span>}
-      </div>
-      <div style={{ marginTop:8, fontSize:11, color: t.subDim, textAlign:"center" }}>
-        ↑ 日付を選んで時間を設定してください
+      <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${t.border}` }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+          <ClockIcon/><span style={{ fontSize:12, color:t.sub }}>時間</span>
+          {selDate && <span style={{ fontSize:11, color:"#a78bfa", marginLeft:"auto" }}>
+            ✓ {viewMonth+1}/{selDate} {String(selHour).padStart(2,"0")}:{String(selMin).padStart(2,"0")}
+          </span>}
+        </div>
+        <div style={{ display:"flex", gap:16, justifyContent:"center", alignItems:"flex-start" }}>
+          <div>
+            <div style={{ fontSize:10, color:t.sub, textAlign:"center", marginBottom:4 }}>時</div>
+            <WheelPicker
+              items={Array.from({length:24},(_,i)=>({value:i,label:String(i).padStart(2,"0")}))}
+              value={selHour} visibleCount={5} width={76} theme={t}
+              onChange={h => updateTime(Number(h), selMin)}
+            />
+          </div>
+          <div style={{ fontSize:24, fontWeight:700, color:t.sub, alignSelf:"center", marginTop:20 }}>:</div>
+          <div>
+            <div style={{ fontSize:10, color:t.sub, textAlign:"center", marginBottom:4 }}>分</div>
+            <WheelPicker
+              items={[0,5,10,15,20,25,30,35,40,45,50,55].map(m=>({value:m,label:String(m).padStart(2,"0")}))}
+              value={selMin} visibleCount={5} width={76} theme={t}
+              onChange={m => updateTime(selHour, Number(m))}
+            />
+          </div>
+        </div>
+        <div style={{ marginTop:8, fontSize:11, color:t.subDim, textAlign:"center" }}>↑ 日付を選んで時間を設定</div>
       </div>
       {value && (
         <button onClick={()=>onChange(null)} style={{ marginTop:8, width:"100%", background:"rgba(248,113,113,0.1)", border:"none", borderRadius:10, color:"#f87171", fontSize:12, padding:"8px 0", cursor:"pointer" }}>
@@ -303,16 +412,18 @@ function RepeatPicker({ value, onChange, theme }) {
   ];
 
   const current = value?.type || null;
-  const [daysVal,  setDaysVal]  = useState(String(value?.days || 2));
-  const [domVal,   setDomVal]   = useState(String(value?.dayOfMonth || 1));
+  const [hourVal,  setHourVal]  = useState(value?.hour ?? 9);
+  const [daysVal,  setDaysVal]  = useState(value?.days || 2);
+  const [domVal,   setDomVal]   = useState(value?.dayOfMonth || 1);
   const [weekdays, setWeekdays] = useState(value?.weekdays || [1]);
 
   const select = (key) => {
     if (current === key) { onChange(null); return; }
-    if (key === "days")               onChange({ type: key, days: parseInt(daysVal,10) || 2 });
-    else if (key === "monthly-fixed") onChange({ type: key, dayOfMonth: parseInt(domVal,10) || 1 });
-    else if (key === "weekly-days")   onChange({ type: key, weekdays });
-    else                              onChange({ type: key });
+    if (key === "daily")             onChange({ type: key, hour: hourVal });
+    else if (key === "days")         onChange({ type: key, days: daysVal });
+    else if (key === "monthly-fixed") onChange({ type: key, dayOfMonth: domVal });
+    else if (key === "weekly-days")  onChange({ type: key, weekdays });
+    else                             onChange({ type: key });
   };
 
   const toggleWeekday = (wd) => {
@@ -322,17 +433,6 @@ function RepeatPicker({ value, onChange, theme }) {
     if (next.length === 0) return;
     setWeekdays(next);
     if (current === "weekly-days") onChange({ type: "weekly-days", weekdays: next });
-  };
-
-  const updateDays = (v) => {
-    setDaysVal(v);
-    const n = parseInt(v, 10);
-    if (!isNaN(n) && n >= 1 && current === "days") onChange({ type: "days", days: n });
-  };
-  const updateDom = (v) => {
-    setDomVal(v);
-    const n = parseInt(v, 10);
-    if (!isNaN(n) && n >= 1 && current === "monthly-fixed") onChange({ type: "monthly-fixed", dayOfMonth: n });
   };
 
   return (
@@ -350,24 +450,34 @@ function RepeatPicker({ value, onChange, theme }) {
           <button onClick={() => onChange(null)} style={{ background: "rgba(248,113,113,0.1)", border: "none", borderRadius: 8, color: "#f87171", padding: "5px 10px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>クリア</button>
         )}
       </div>
+      {current === "daily" && (
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginTop:8 }}>
+          <span style={{ fontSize:12, color:t.sub }}>時間:</span>
+          <WheelPicker
+            items={Array.from({length:24},(_,i)=>({value:i,label:`${i}時`}))}
+            value={hourVal} visibleCount={3} width={80} theme={t}
+            onChange={h => { const n=Number(h); setHourVal(n); onChange({type:"daily",hour:n}); }}
+          />
+        </div>
+      )}
       {current === "days" && (
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
-          <span style={{ fontSize:12, color: t.sub }}>間隔:</span>
-          <input type="text" inputMode="numeric" pattern="[0-9]*" value={daysVal}
-            onChange={e => updateDays(e.target.value)}
-            onBlur={e => { const n = parseInt(e.target.value,10); if (isNaN(n)||n<1) setDaysVal("1"); }}
-            style={{ width:60, background: t.inputBg, border:`1px solid ${t.inputBorder}`, borderRadius:8, padding:"4px 8px", color: t.text, fontSize:13, outline:"none", textAlign:"center" }}/>
-          <span style={{ fontSize:12, color: t.sub }}>日</span>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginTop:8 }}>
+          <span style={{ fontSize:12, color:t.sub }}>間隔:</span>
+          <WheelPicker
+            items={Array.from({length:30},(_,i)=>({value:i+1,label:`${i+1}日`}))}
+            value={daysVal} visibleCount={3} width={80} theme={t}
+            onChange={d => { const n=Number(d); setDaysVal(n); onChange({type:"days",days:n}); }}
+          />
         </div>
       )}
       {current === "monthly-fixed" && (
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
-          <span style={{ fontSize:12, color: t.sub }}>日付:</span>
-          <input type="text" inputMode="numeric" pattern="[0-9]*" value={domVal}
-            onChange={e => updateDom(e.target.value)}
-            onBlur={e => { const n = parseInt(e.target.value,10); if (isNaN(n)||n<1) setDomVal("1"); else if (n>31) setDomVal("31"); }}
-            style={{ width:60, background: t.inputBg, border:`1px solid ${t.inputBorder}`, borderRadius:8, padding:"4px 8px", color: t.text, fontSize:13, outline:"none", textAlign:"center" }}/>
-          <span style={{ fontSize:12, color: t.sub }}>日</span>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginTop:8 }}>
+          <span style={{ fontSize:12, color:t.sub }}>日付:</span>
+          <WheelPicker
+            items={Array.from({length:31},(_,i)=>({value:i+1,label:`${i+1}日`}))}
+            value={domVal} visibleCount={3} width={80} theme={t}
+            onChange={d => { const n=Number(d); setDomVal(n); onChange({type:"monthly-fixed",dayOfMonth:n}); }}
+          />
         </div>
       )}
       {current === "weekly-days" && (
@@ -565,16 +675,10 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
             <div style={{ fontSize:11,color:"#a78bfa",fontWeight:700,letterSpacing:1,marginBottom:12 }}>💰 価格・メモ</div>
 
             {/* 目安価格 */}
-            <div style={{ marginBottom:10 }}>
-              <div style={{ fontSize:11,color:t.sub,marginBottom:5 }}>目安価格</div>
-              <div style={{ position:"relative",display:"inline-block" }}>
-                <select value={price} onChange={e=>setPrice(e.target.value)}
-                  style={{ ...inputSt,width:120,appearance:"none",WebkitAppearance:"none",paddingRight:28,cursor:"pointer" }}>
-                  <option value="">なし</option>
-                  {PRICE_OPTIONS.filter(p=>p).map(p=><option key={p} value={p}>{p}円</option>)}
-                </select>
-                <span style={{ position:"absolute",right:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:t.sub,fontSize:10 }}>▼</span>
-              </div>
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:11,color:t.sub,marginBottom:8 }}>目安価格</div>
+              <PriceWheelPicker value={price} onChange={setPrice} theme={t}/>
+              {price && <div style={{ fontSize:12, color:"#fbbf24", marginTop:4 }}>設定: {price}円</div>}
             </div>
 
             {/* 店舗別底値 */}
@@ -584,20 +688,16 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
                 {allStores.map(s=><option key={s} value={s}/>)}
               </datalist>
               {storePrices.map((sp, i) => (
-                <div key={i} style={{ display:"flex",gap:5,marginBottom:5,alignItems:"center" }}>
+                <div key={i} style={{ display:"flex",gap:5,marginBottom:8,alignItems:"flex-end",flexWrap:"wrap" }}>
                   <input value={sp.store} list={`store-names-${todo.id}`}
                     onChange={e=>setStorePrices(prev=>prev.map((x,j)=>j===i?{...x,store:e.target.value}:x))}
                     placeholder="店舗名"
-                    style={{ ...inputSt,flex:1,minWidth:0 }}/>
-                  <div style={{ position:"relative",flexShrink:0 }}>
-                    <select value={sp.price}
-                      onChange={e=>setStorePrices(prev=>prev.map((x,j)=>j===i?{...x,price:e.target.value}:x))}
-                      style={{ ...inputSt,width:95,appearance:"none",WebkitAppearance:"none",paddingRight:24,cursor:"pointer" }}>
-                      <option value="">なし</option>
-                      {PRICE_OPTIONS.filter(p=>p).map(p=><option key={p} value={p}>{p}円</option>)}
-                    </select>
-                    <span style={{ position:"absolute",right:7,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:t.sub,fontSize:10 }}>▼</span>
-                  </div>
+                    style={{ ...inputSt,flex:1,minWidth:80 }}/>
+                  <WheelPicker
+                    items={["","10","20","30","50","80","100","120","150","200","250","300","350","400","500","700","1000"].map(p=>({value:p,label:p?`${p}円`:"なし"}))}
+                    value={sp.price} visibleCount={3} width={90} theme={t}
+                    onChange={v => setStorePrices(prev=>prev.map((x,j)=>j===i?{...x,price:v}:x))}
+                  />
                   <button onClick={()=>setStorePrices(prev=>prev.filter((_,j)=>j!==i))}
                     style={{ background:"rgba(248,113,113,0.15)",border:"none",borderRadius:8,color:"#f87171",padding:"0 10px",cursor:"pointer",fontFamily:"inherit",fontSize:14,flexShrink:0,height:36 }}>×</button>
                 </div>
@@ -818,6 +918,9 @@ export default function TodoApp() {
   const [userLoc,     setUserLoc]     = useState(null);
   const [locLoading,  setLocLoading]  = useState(false);
   const [showLocModal,setShowLocModal]= useState(false);
+  // Drag reorder
+  const [dragId,      setDragId]      = useState(null);
+  const [dragOverId,  setDragOverId]  = useState(null);
 
   const inputRef    = useRef(null);
   const nextId      = useRef(10);
@@ -825,10 +928,29 @@ export default function TodoApp() {
   const notifMap    = useRef({});
   const notifTimer  = useRef(null);
   const wasListening = useRef(false);
+  const itemRefs    = useRef({});
+  const dragTimerRef = useRef(null);
+  const dragActiveRef = useRef(false);
+  const touchStartYRef = useRef(0);
+
+  // Voice auto-add refs
+  const voiceSilenceTimer = useRef(null);
+  const inputValueRef = useRef("");
+  const selectedTagRef = useRef(selectedTag);
+  const priorityRef = useRef(priority);
+  const deadlineRef = useRef(deadline);
+  const repeatRef = useRef(repeat);
 
   const theme   = THEMES.find(t => t.id === themeId) || THEMES[0];
   const isLight = theme.isLight;
   const t       = theme;
+
+  // Keep refs updated
+  useEffect(() => { inputValueRef.current = input; }, [input]);
+  useEffect(() => { selectedTagRef.current = selectedTag; }, [selectedTag]);
+  useEffect(() => { priorityRef.current = priority; }, [priority]);
+  useEffect(() => { deadlineRef.current = deadline; }, [deadline]);
+  useEffect(() => { repeatRef.current = repeat; }, [repeat]);
 
   // ── Init: load persisted data + Capacitor setup ────────────────────────────
   useEffect(() => {
@@ -913,10 +1035,11 @@ export default function TodoApp() {
     return () => clearInterval(notifTimer.current);
   }, [todos]);
 
-  // ── Voice input (interim results for faster feedback) ─────────────────────
+  // ── Voice input with 2-second silence auto-add ────────────────────────────
   const toggleVoice = useCallback(async () => {
     if (listening) {
       stopVoice.current?.();
+      clearTimeout(voiceSilenceTimer.current);
       setListening(false);
       setInterimText("");
       return;
@@ -924,10 +1047,38 @@ export default function TodoApp() {
     await haptics.light();
     setListening(true);
     stopVoice.current = startListening({
-      onResult:  text => { setInput(prev => prev + text); setInterimText(""); },
+      onResult: text => {
+        setInput(prev => {
+          const v = prev + text;
+          inputValueRef.current = v;
+          return v;
+        });
+        setInterimText("");
+        clearTimeout(voiceSilenceTimer.current);
+        voiceSilenceTimer.current = setTimeout(() => {
+          const txt = inputValueRef.current.trim();
+          const tag = selectedTagRef.current;
+          if (txt && tag) {
+            setTodos(prev => [{
+              id: nextId.current++, text: txt, done: false,
+              tagId: tag, priority: priorityRef.current || "none",
+              deadline: deadlineRef.current, repeat: repeatRef.current,
+              createdAt: Date.now(), price: null, memo: null, storePrices: [],
+            }, ...prev]);
+            setInput(""); inputValueRef.current = "";
+            setDeadline(null); setPriority("none"); setRepeat(null);
+            setShowCal(false); setShowRepeat(false);
+            haptics.success();
+          }
+          stopVoice.current?.();
+          setListening(false);
+          setInterimText("");
+        }, 2000);
+      },
       onInterim: text => setInterimText(text),
-      onEnd:     () => { setListening(false); setInterimText(""); },
+      onEnd:     () => { clearTimeout(voiceSilenceTimer.current); setListening(false); setInterimText(""); },
       onError:   e  => {
+        clearTimeout(voiceSilenceTimer.current);
         setListening(false);
         setInterimText("");
         if (e === "unsupported")
@@ -1018,6 +1169,61 @@ export default function TodoApp() {
     setEditTodo(null);
   };
 
+  // ── Drag-to-reorder (long press) ─────────────────────────────────────────
+  const handleItemTouchStart = useCallback((e, id) => {
+    touchStartYRef.current = e.touches[0].clientY;
+    dragActiveRef.current = false;
+    clearTimeout(dragTimerRef.current);
+    dragTimerRef.current = setTimeout(() => {
+      dragActiveRef.current = true;
+      haptics.medium();
+      setDragId(id);
+    }, 500);
+  }, []);
+
+  const handleItemTouchMove = useCallback((e) => {
+    const dy = Math.abs(e.touches[0].clientY - touchStartYRef.current);
+    if (!dragActiveRef.current) {
+      if (dy > 10) clearTimeout(dragTimerRef.current);
+      return;
+    }
+    e.preventDefault();
+    const y = e.touches[0].clientY;
+    let found = null;
+    Object.keys(itemRefs.current).forEach(refId => {
+      const el = itemRefs.current[Number(refId)];
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      if (y >= r.top && y <= r.bottom) found = Number(refId);
+    });
+    if (found !== null) setDragOverId(found);
+  }, []);
+
+  const handleItemTouchEnd = useCallback(() => {
+    clearTimeout(dragTimerRef.current);
+    if (dragActiveRef.current && dragId != null && dragOverId != null && dragId !== dragOverId) {
+      setTodos(prev => {
+        const arr = [...prev];
+        const fi = arr.findIndex(td => td.id === dragId);
+        const ti = arr.findIndex(td => td.id === dragOverId);
+        if (fi < 0 || ti < 0) return prev;
+        const [item] = arr.splice(fi, 1);
+        arr.splice(ti, 0, item);
+        return arr;
+      });
+    }
+    dragActiveRef.current = false;
+    setDragId(null);
+    setDragOverId(null);
+  }, [dragId, dragOverId]);
+
+  const handleItemTouchCancel = useCallback(() => {
+    clearTimeout(dragTimerRef.current);
+    dragActiveRef.current = false;
+    setDragId(null);
+    setDragOverId(null);
+  }, []);
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const getTag = id => tags.find(tg => tg.id === id);
 
@@ -1058,6 +1264,7 @@ export default function TodoApp() {
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
         ::-webkit-scrollbar{width:3px;height:3px;} ::-webkit-scrollbar-thumb{background:#333;border-radius:2px;}
+        .wheel-list::-webkit-scrollbar{display:none}
         .todo-item{transition:all 0.22s cubic-bezier(.4,0,.2,1);}
         @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.14)}100%{transform:scale(1)}}
         .pop{animation:pop 0.35s cubic-bezier(.4,0,.2,1);}
@@ -1118,10 +1325,10 @@ export default function TodoApp() {
 
         {/* Input area */}
         <div style={{ padding:"14px 16px 10px", borderBottom:`1px solid ${t.border}`, background:t.card }}>
-          <div style={{ position:"relative", display:"flex", gap:8, background:t.inputBg, borderRadius:14, padding:"4px 6px 4px 14px", border:`1px solid ${t.inputBorder}`, alignItems:"center" }}>
+          <div style={{ position:"relative", display:"flex", gap:8, background:t.inputBg, borderRadius:14, padding:"4px 6px 4px 14px", border:`1px solid ${t.inputBorder}`, alignItems:"center", touchAction:"manipulation" }}>
             <input ref={inputRef} readOnly={listening} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTodo()}
               placeholder={listening ? (interimText || "聞いています…") : "新しいタスクを入力…"} enterKeyHint="done"
-              style={{ flex:1,background:"transparent",border:"none",color:t.text,fontSize:14,padding:"10px 0",minWidth:0 }}/>
+              style={{ flex:1,background:"transparent",border:"none",color:t.text,fontSize:16,padding:"10px 0",minWidth:0 }}/>
             {interimText && (
               <span style={{ position:"absolute", bottom:"calc(100% + 4px)", left:14, fontSize:12, color:"#a78bfa", background:t.card, padding:"2px 8px", borderRadius:6, border:`1px solid rgba(124,106,247,0.3)`, pointerEvents:"none", whiteSpace:"nowrap", maxWidth:"80vw", overflow:"hidden", textOverflow:"ellipsis" }}>
                 {interimText}
@@ -1186,18 +1393,20 @@ export default function TodoApp() {
           </div>
         </div>
 
-        {/* Filter + Sort */}
-        <div style={{ padding:"9px 12px",display:"flex",gap:5,alignItems:"center",borderBottom:`1px solid ${t.border}`,overflowX:"auto",background:t.card }}>
+        {/* Filter row */}
+        <div style={{ padding:"7px 12px 4px", display:"flex", gap:5, alignItems:"center", background:t.card, overflowX:"auto", scrollbarWidth:"none" }}>
           {[{id:"all",label:"すべて"},...tags].map(tg=>(
             <button key={tg.id} onClick={()=>setFilter(tg.id)}
-              style={{ background:filter===tg.id?"rgba(124,106,247,0.18)":"transparent",color:filter===tg.id?"#a78bfa":t.sub,border:filter===tg.id?"1px solid rgba(124,106,247,0.35)":"1px solid transparent",borderRadius:8,padding:"4px 11px",fontSize:12,fontWeight:500,whiteSpace:"nowrap" }}>{tg.label}</button>
+              style={{ background:filter===tg.id?"rgba(124,106,247,0.18)":"transparent", color:filter===tg.id?"#a78bfa":t.sub, border:filter===tg.id?"1px solid rgba(124,106,247,0.35)":"1px solid transparent", borderRadius:8, padding:"5px 12px", fontSize:13, fontWeight:500, whiteSpace:"nowrap" }}>{tg.label}</button>
           ))}
-          <div style={{ marginLeft:"auto",display:"flex",gap:4,flexShrink:0 }}>
-            {[{k:"created",l:"新着"},{k:"priority",l:"優先度"},{k:"deadline",l:"期限"}].map(({k,l})=>(
-              <button key={k} onClick={()=>setSortBy(k)}
-                style={{ background:sortBy===k?isLight?"rgba(0,0,0,0.07)":"rgba(255,255,255,0.08)":"transparent",color:sortBy===k?t.text:t.subDim,border:"none",borderRadius:7,padding:"3px 8px",fontSize:11 }}>{l}</button>
-            ))}
-          </div>
+        </div>
+        {/* Sort row */}
+        <div style={{ padding:"4px 12px 7px", display:"flex", gap:4, alignItems:"center", background:t.card, borderBottom:`1px solid ${t.border}` }}>
+          <span style={{ fontSize:11, color:t.subDim, marginRight:4 }}>並べ替え:</span>
+          {[{k:"created",l:"新着"},{k:"priority",l:"優先度"},{k:"deadline",l:"期限"}].map(({k,l})=>(
+            <button key={k} onClick={()=>setSortBy(k)}
+              style={{ background:sortBy===k?isLight?"rgba(0,0,0,0.09)":"rgba(255,255,255,0.1)":"transparent", color:sortBy===k?t.text:t.subDim, border:sortBy===k?`1px solid ${t.border}`:"none", borderRadius:8, padding:"5px 12px", fontSize:13, fontWeight:sortBy===k?700:400 }}>{l}</button>
+          ))}
         </div>
 
         {/* Todo list */}
@@ -1213,13 +1422,26 @@ export default function TodoApp() {
             const showGrocery = userLoc && isGrocery(todo.text);
             const hasPrice = todo.price || (todo.storePrices?.length > 0);
             return (
-              <div key={todo.id} className={`todo-item slide-in${animId===todo.id?" pop":""}`} style={{
-                display:"flex",alignItems:"flex-start",gap:10,
-                padding:"11px 12px",borderRadius:14,marginBottom:6,
-                background:overdue?"rgba(248,113,113,0.06)":todo.done?isLight?"rgba(0,0,0,0.02)":"rgba(255,255,255,0.02)":isLight?"rgba(0,0,0,0.03)":"rgba(255,255,255,0.04)",
-                border:`1px solid ${overdue?"rgba(248,113,113,0.2)":todayDue?"rgba(251,191,36,0.2)":t.border}`,
-                opacity:todo.done?0.5:1,
-              }}>
+              <div
+                key={todo.id}
+                ref={el => { if(el) itemRefs.current[todo.id]=el; else delete itemRefs.current[todo.id]; }}
+                onTouchStart={e=>handleItemTouchStart(e,todo.id)}
+                onTouchMove={handleItemTouchMove}
+                onTouchEnd={handleItemTouchEnd}
+                onTouchCancel={handleItemTouchCancel}
+                className={`todo-item slide-in${animId===todo.id?" pop":""}`}
+                style={{
+                  display:"flex",alignItems:"flex-start",gap:10,
+                  padding:"11px 12px",borderRadius:14,marginBottom:6,
+                  background:overdue?"rgba(248,113,113,0.06)":todo.done?isLight?"rgba(0,0,0,0.02)":"rgba(255,255,255,0.02)":isLight?"rgba(0,0,0,0.03)":"rgba(255,255,255,0.04)",
+                  border:`1px solid ${dragId===todo.id?"#7c6af7":overdue?"rgba(248,113,113,0.2)":todayDue?"rgba(251,191,36,0.2)":t.border}`,
+                  borderStyle: dragId===todo.id ? "dashed" : "solid",
+                  opacity:todo.done?0.5:1,
+                  transform: dragOverId===todo.id&&dragId!==todo.id ? "translateY(-3px)" : "none",
+                  boxShadow: dragId===todo.id ? "0 8px 24px rgba(124,106,247,0.4)" : "none",
+                  transition: "transform 0.15s, box-shadow 0.15s, border-color 0.15s",
+                  userSelect: "none",
+                }}>
                 <button onClick={()=>toggleTodo(todo.id)}
                   style={{ width:28,height:28,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:todo.done?"linear-gradient(135deg,#7c6af7,#a78bfa)":t.chipOff,color:todo.done?"#fff":t.sub,border:"none",marginTop:1 }}>
                   <CheckIcon done={todo.done}/>
@@ -1265,11 +1487,27 @@ export default function TodoApp() {
         </div>
 
         {/* Footer */}
-        <div style={{ padding:"10px 16px 14px",borderTop:`1px solid ${t.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:t.card }}>
-          <span style={{ fontSize:11,color:t.subDim,fontFamily:"'Space Mono',monospace" }}>{todos.filter(td=>!td.done).length} tasks left</span>
-          <div style={{ display:"flex",gap:4,alignItems:"center" }}>
-            <button onClick={()=>setShowDone(v=>!v)} style={{ background:"transparent",border:"none",color:showDone?t.subDim:"#a78bfa",fontSize:11,padding:"3px 6px",borderRadius:6 }}>{showDone?"完了を隠す":"完了を表示"}</button>
-            {doneCount>0&&<button onClick={async()=>{await haptics.medium();setTodos(p=>p.filter(td=>!td.done));}} style={{ background:"transparent",border:"none",color:t.subDim,fontSize:11,padding:"3px 6px",borderRadius:6 }} onMouseEnter={e=>e.target.style.color="#f87171"} onMouseLeave={e=>e.target.style.color=t.subDim}>完了済みを削除</button>}
+        <div style={{ padding:"10px 16px 14px", borderTop:`1px solid ${t.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", background:t.card }}>
+          <span style={{ fontSize:12, color:t.subDim, fontFamily:"'Space Mono',monospace" }}>{todos.filter(td=>!td.done).length} tasks left</span>
+          <div style={{ position:"relative" }}>
+            <select
+              value={showDone ? "show" : "hide"}
+              onChange={async e => {
+                const v = e.target.value;
+                if (v === "show") setShowDone(true);
+                else if (v === "hide") setShowDone(false);
+                else if (v === "delete" && doneCount > 0) {
+                  await haptics.medium();
+                  setTodos(p => p.filter(td => !td.done));
+                  setShowDone(true);
+                }
+              }}
+              style={{ background:t.inputBg, border:`1px solid ${t.inputBorder}`, borderRadius:10, color:t.text, padding:"8px 36px 8px 14px", fontSize:14, cursor:"pointer", appearance:"none", WebkitAppearance:"none", fontFamily:"inherit" }}>
+              <option value="show">完了済みを表示</option>
+              <option value="hide">完了済みを非表示</option>
+              {doneCount > 0 && <option value="delete">完了済みを削除（{doneCount}件）</option>}
+            </select>
+            <span style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", pointerEvents:"none", color:t.sub, fontSize:11 }}>▼</span>
           </div>
         </div>
       </div>
