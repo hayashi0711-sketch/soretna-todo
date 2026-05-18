@@ -71,15 +71,17 @@ function calcNextDeadline(repeat, fromDate) {
 
 // ─── Theme Definitions ────────────────────────────────────────────────────────
 const THEMES = [
-  { id: "dark",    label: "ダーク",    emoji: "🌑", bg: "#0f0f13", card: "#16161d", headerCard: "#1a1a24", text: "#f0f0f0", sub: "#888", subDim: "#444", border: "rgba(255,255,255,0.06)", inputBg: "#1e1e28", inputBorder: "rgba(255,255,255,0.07)", chipOff: "rgba(255,255,255,0.05)", chipOffText: "#888", calBg: "#1e1e2e", sidebarBg: "#13131a", sidebarBorder: "rgba(255,255,255,0.06)" },
-  { id: "navy",    label: "ネイビー",  emoji: "🌊", bg: "#0a0e1a", card: "#111827", headerCard: "#161e30", text: "#e8eaf0", sub: "#7a8aaa", subDim: "#3a4560", border: "rgba(100,130,200,0.12)", inputBg: "#1a2338", inputBorder: "rgba(100,130,200,0.15)", chipOff: "rgba(100,130,200,0.08)", chipOffText: "#7a8aaa", calBg: "#1a2338", sidebarBg: "#0d1525", sidebarBorder: "rgba(100,130,200,0.12)" },
-  { id: "forest",  label: "フォレスト",emoji: "🌿", bg: "#0b130d", card: "#121a14", headerCard: "#172019", text: "#e0ede2", sub: "#6a9470", subDim: "#2a4030", border: "rgba(80,160,100,0.12)", inputBg: "#1a2a1c", inputBorder: "rgba(80,160,100,0.15)", chipOff: "rgba(80,160,100,0.08)", chipOffText: "#6a9470", calBg: "#1a2a1c", sidebarBg: "#0e1810", sidebarBorder: "rgba(80,160,100,0.12)" },
-  { id: "rose",    label: "ローズ",    emoji: "🌸", bg: "#160d10", card: "#1e1218", headerCard: "#251520", text: "#f0e4e8", sub: "#b07080", subDim: "#50303a", border: "rgba(200,80,120,0.12)", inputBg: "#2a1820", inputBorder: "rgba(200,80,120,0.15)", chipOff: "rgba(200,80,120,0.08)", chipOffText: "#b07080", calBg: "#2a1820", sidebarBg: "#190e12", sidebarBorder: "rgba(200,80,120,0.12)" },
-  { id: "light",   label: "ライト",    emoji: "☀️", bg: "#f0f2f8", card: "#ffffff", headerCard: "#f8f9fc", text: "#1a1a2e", sub: "#666888", subDim: "#aaaacc", border: "rgba(0,0,0,0.07)", inputBg: "#f0f2f8", inputBorder: "rgba(0,0,0,0.1)", chipOff: "rgba(0,0,0,0.06)", chipOffText: "#666888", calBg: "#f0f2f8", sidebarBg: "#e8eaf4", sidebarBorder: "rgba(0,0,0,0.08)" },
-  { id: "sand",    label: "サンド",    emoji: "🏖️", bg: "#1a1510", card: "#211c14", headerCard: "#28221a", text: "#f0e8d8", sub: "#a09070", subDim: "#504030", border: "rgba(180,140,80,0.15)", inputBg: "#2a2218", inputBorder: "rgba(180,140,80,0.18)", chipOff: "rgba(180,140,80,0.08)", chipOffText: "#a09070", calBg: "#2a2218", sidebarBg: "#161208", sidebarBorder: "rgba(180,140,80,0.15)" },
+  // ── 暗め ──
+  { id: "dark",   label: "ダーク",     emoji: "🌑", isLight: false, bg: "#0f0f13", card: "#16161d", headerCard: "#1a1a24", text: "#f0f0f0", sub: "#888", subDim: "#444", border: "rgba(255,255,255,0.06)", inputBg: "#1e1e28", inputBorder: "rgba(255,255,255,0.07)", chipOff: "rgba(255,255,255,0.05)", chipOffText: "#888", calBg: "#1e1e2e", sidebarBg: "#13131a", sidebarBorder: "rgba(255,255,255,0.06)" },
+  { id: "navy",   label: "ネイビー",   emoji: "🌊", isLight: false, bg: "#0a0e1a", card: "#111827", headerCard: "#161e30", text: "#e8eaf0", sub: "#7a8aaa", subDim: "#3a4560", border: "rgba(100,130,200,0.12)", inputBg: "#1a2338", inputBorder: "rgba(100,130,200,0.15)", chipOff: "rgba(100,130,200,0.08)", chipOffText: "#7a8aaa", calBg: "#1a2338", sidebarBg: "#0d1525", sidebarBorder: "rgba(100,130,200,0.12)" },
+  { id: "forest", label: "フォレスト", emoji: "🌿", isLight: false, bg: "#0b130d", card: "#121a14", headerCard: "#172019", text: "#e0ede2", sub: "#6a9470", subDim: "#2a4030", border: "rgba(80,160,100,0.12)", inputBg: "#1a2a1c", inputBorder: "rgba(80,160,100,0.15)", chipOff: "rgba(80,160,100,0.08)", chipOffText: "#6a9470", calBg: "#1a2a1c", sidebarBg: "#0e1810", sidebarBorder: "rgba(80,160,100,0.12)" },
+  // ── 明るめ ──
+  { id: "light",  label: "ライト",     emoji: "☀️", isLight: true,  bg: "#f0f2f8", card: "#ffffff", headerCard: "#f8f9fc", text: "#1a1a2e", sub: "#666888", subDim: "#aaaacc", border: "rgba(0,0,0,0.07)", inputBg: "#f0f2f8", inputBorder: "rgba(0,0,0,0.1)", chipOff: "rgba(0,0,0,0.06)", chipOffText: "#666888", calBg: "#f0f2f8", sidebarBg: "#e8eaf4", sidebarBorder: "rgba(0,0,0,0.08)" },
+  { id: "mint",   label: "ミント",     emoji: "🌱", isLight: true,  bg: "#f0faf4", card: "#ffffff", headerCard: "#f5fdf8", text: "#1a3028", sub: "#5a8070", subDim: "#aaccbb", border: "rgba(0,0,0,0.07)", inputBg: "#edf8f2", inputBorder: "rgba(0,0,0,0.09)", chipOff: "rgba(0,0,0,0.05)", chipOffText: "#5a8070", calBg: "#edf8f2", sidebarBg: "#e4f5ec", sidebarBorder: "rgba(0,0,0,0.07)" },
+  { id: "peach",  label: "ピーチ",     emoji: "🍑", isLight: true,  bg: "#fff8f5", card: "#ffffff", headerCard: "#fff5f0", text: "#2a1810", sub: "#a07060", subDim: "#d4b0a0", border: "rgba(0,0,0,0.07)", inputBg: "#fff2ec", inputBorder: "rgba(0,0,0,0.09)", chipOff: "rgba(0,0,0,0.05)", chipOffText: "#a07060", calBg: "#fff2ec", sidebarBg: "#fde8e0", sidebarBorder: "rgba(0,0,0,0.07)" },
 ];
 
-const getContrastText = (themeId) => themeId === "light" ? "#1a1a2e" : "#f0f0f0";
+const getContrastText = (themeId) => (THEMES.find(th => th.id === themeId)?.isLight ? "#1a1a2e" : "#f0f0f0");
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtDate = (iso) => {
@@ -213,7 +215,7 @@ function MiniCalendar({ value, onChange, theme }) {
   const isTodayDay = (d) => d===today.getDate() && viewMonth===today.getMonth() && viewYear===today.getFullYear();
 
   const t = theme;
-  const isLight = t.id === "light";
+  const isLight = t.isLight;
 
   return (
     <div ref={calRef} style={{ background: t.calBg, borderRadius:16, padding:"14px", border:`1px solid ${t.border}` }}>
@@ -271,7 +273,7 @@ function MiniCalendar({ value, onChange, theme }) {
 // ─── RepeatPicker ──────────────────────────────────────────────────────────────
 function RepeatPicker({ value, onChange, theme }) {
   const t = theme;
-  const isLight = t.id === "light";
+  const isLight = t.isLight;
   const types = [
     { key: "daily",         label: "毎日" },
     { key: "days",          label: "X日ごと" },
@@ -464,21 +466,10 @@ function TodoDetailModal({ todo, tags, onClose, onSave, theme }) {
 // ─── Location Modal ────────────────────────────────────────────────────────────
 function LocationModal({ lat, lng, onClose, theme }) {
   const t = theme;
-  const TOKUBAI_VISITED_KEY = "tokubai_visited";
-  const [tokubaiVisited, setTokubaiVisited] = useState(() => {
-    try { return !!localStorage.getItem(TOKUBAI_VISITED_KEY); } catch { return false; }
-  });
-
-  const handleTokubaiClick = (url) => {
-    try { localStorage.setItem(TOKUBAI_VISITED_KEY, "1"); } catch {}
-    setTokubaiVisited(true);
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
-
   const links = [
-    { label: "Googleマップ スーパー検索", emoji: "🗺️", url: `https://www.google.com/maps/search/%E3%82%B9%E3%83%BC%E3%83%91%E3%83%BC/@${lat},${lng},14z` },
+    { label: "トクバイ（近くの特売）",       emoji: "💰", url: `https://tokubai.co.jp/?lat=${lat}&lng=${lng}` },
+    { label: "Googleマップ スーパー検索",    emoji: "🗺️", url: `https://www.google.com/maps/search/%E3%82%B9%E3%83%BC%E3%83%91%E3%83%BC/@${lat},${lng},14z` },
   ];
-
   return (
     <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
       <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:340,boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}` }} onClick={e=>e.stopPropagation()}>
@@ -490,32 +481,14 @@ function LocationModal({ lat, lng, onClose, theme }) {
           <div style={{ fontSize:12,color:t.sub,marginBottom:12,textAlign:"center" }}>
             現在地: {lat.toFixed(4)}, {lng.toFixed(4)}
           </div>
-          {links.map(link => (
+          {links.map((link, i) => (
             <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer"
-              style={{ display:"flex",alignItems:"center",gap:12,background:t.inputBg,borderRadius:12,padding:"14px 16px",marginBottom:8,textDecoration:"none",border:`1px solid ${t.border}` }}>
+              style={{ display:"flex",alignItems:"center",gap:12,background:t.inputBg,borderRadius:12,padding:"14px 16px",marginBottom: i < links.length-1 ? 8 : 0,textDecoration:"none",border:`1px solid ${t.border}` }}>
               <span style={{ fontSize:22 }}>{link.emoji}</span>
               <span style={{ fontSize:14,color:t.text,fontWeight:600 }}>{link.label}</span>
               <span style={{ marginLeft:"auto",fontSize:12,color:t.sub }}>→</span>
             </a>
           ))}
-          {/* トクバイ: 初回は近くの店舗ページ、2回目以降はお気に入り店舗も表示 */}
-          <button onClick={() => handleTokubaiClick(`https://tokubai.co.jp/?lat=${lat}&lng=${lng}`)}
-            style={{ display:"flex",alignItems:"center",gap:12,background:t.inputBg,borderRadius:12,padding:"14px 16px",marginBottom: tokubaiVisited ? 8 : 0,border:`1px solid ${t.border}`,width:"100%",cursor:"pointer",fontFamily:"inherit" }}>
-            <span style={{ fontSize:22 }}>💰</span>
-            <span style={{ fontSize:14,color:t.text,fontWeight:600 }}>トクバイ（近くの特売）</span>
-            <span style={{ marginLeft:"auto",fontSize:12,color:t.sub }}>→</span>
-          </button>
-          {tokubaiVisited && (
-            <button onClick={() => { window.open("https://tokubai.co.jp/follows/list", "_blank", "noopener,noreferrer"); }}
-              style={{ display:"flex",alignItems:"center",gap:12,background:"rgba(124,106,247,0.1)",borderRadius:12,padding:"14px 16px",marginBottom:0,border:`1px solid rgba(124,106,247,0.3)`,width:"100%",cursor:"pointer",fontFamily:"inherit" }}>
-              <span style={{ fontSize:22 }}>📌</span>
-              <div style={{ textAlign:"left" }}>
-                <div style={{ fontSize:14,color:"#a78bfa",fontWeight:600 }}>登録済み店舗の特売情報</div>
-                <div style={{ fontSize:11,color:t.sub,marginTop:2 }}>フォロー中の店舗をチェック</div>
-              </div>
-              <span style={{ marginLeft:"auto",fontSize:12,color:t.sub }}>→</span>
-            </button>
-          )}
         </div>
         <div style={{ padding:"8px 16px 16px" }}>
           <button onClick={onClose} style={{ width:"100%",background:t.chipOff,border:"none",borderRadius:12,color:t.sub,fontSize:14,padding:"12px 0",cursor:"pointer",fontFamily:"inherit" }}>閉じる</button>
@@ -578,7 +551,7 @@ function ThemeSwitcher({ currentThemeId, onChange }) {
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 function Sidebar({ todos, currentView, onViewChange, themeId, onThemeChange, theme, isOpen, onClose }) {
   const t = theme;
-  const isLight = t.id === "light";
+  const isLight = t.isLight;
 
   const now = new Date();
   const counts = {
@@ -702,9 +675,12 @@ export default function TodoApp() {
   const stopVoice   = useRef(null);
   const notifMap    = useRef({});
   const notifTimer  = useRef(null);
+  const swipeStartX = useRef({});
+  const [swipingId,   setSwipingId]   = useState(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
 
   const theme   = THEMES.find(t => t.id === themeId) || THEMES[0];
-  const isLight = theme.id === "light";
+  const isLight = theme.isLight;
   const t       = theme;
 
   // ── Init: load persisted data + Capacitor setup ────────────────────────────
@@ -937,11 +913,11 @@ export default function TodoApp() {
         .sidebar-panel{display:flex;}
         .hamburger-btn{display:none;}
         @media (max-width:767px){
-          .sidebar-panel{
-            position:fixed;left:0;top:0;bottom:0;z-index:100;
-            transform:translateX(-100%);transition:transform 0.25s ease;
+          .sidebar-panel{display:none!important;}
+          .sidebar-panel.open{
+            display:flex!important;
+            position:fixed;left:0;top:0;bottom:0;z-index:100;width:240px;
           }
-          .sidebar-panel.open{transform:translateX(0);}
           .sidebar-overlay{display:block!important;}
           .hamburger-btn{display:flex!important;}
         }
@@ -993,8 +969,8 @@ export default function TodoApp() {
           {/* Location button */}
           <button onClick={handleLocationClick}
             title="周辺お得情報"
-            style={{ background: userLoc ? "rgba(124,106,247,0.15)" : t.chipOff, border:"none", borderRadius:9, color: userLoc ? "#a78bfa" : t.sub, padding:"6px 10px", fontSize:12, display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
-            {locLoading ? "⌛" : "🏷️"}<span style={{fontSize:11}}>周辺お得情報</span>
+            style={{ background: locLoading ? "rgba(124,106,247,0.2)" : "linear-gradient(135deg,#f97316,#fb923c)", border:"none", borderRadius:10, color:"#fff", padding:"7px 12px", fontSize:12, fontWeight:700, display:"flex", alignItems:"center", gap:5, flexShrink:0, boxShadow:"0 2px 8px rgba(249,115,22,0.4)" }}>
+            {locLoading ? "⌛" : "🏷️"}<span style={{fontSize:11, whiteSpace:"nowrap"}}>周辺お得情報</span>
           </button>
         </div>
 
@@ -1093,14 +1069,46 @@ export default function TodoApp() {
             const todayDue  = !todo.done && isToday(todo.deadline) && !overdue;
             const repeatLabel = getRepeatLabel(todo.repeat);
             const showGrocery = userLoc && isGrocery(todo.text);
+            const isSwiping = swipingId === todo.id;
+            const swipeX    = isSwiping ? swipeOffset : 0;
             return (
-              <div key={todo.id} className={`todo-item slide-in${animId===todo.id?" pop":""}`} style={{
+              <div key={todo.id} className={`todo-item slide-in${animId===todo.id?" pop":""}`}
+                onTouchStart={e => {
+                  swipeStartX.current[todo.id] = e.touches[0].clientX;
+                  setSwipingId(todo.id);
+                  setSwipeOffset(0);
+                }}
+                onTouchMove={e => {
+                  if (swipingId !== todo.id) return;
+                  const dx = e.touches[0].clientX - (swipeStartX.current[todo.id] || 0);
+                  if (dx > 0) setSwipeOffset(Math.min(dx, 120));
+                }}
+                onTouchEnd={e => {
+                  const startX = swipeStartX.current[todo.id];
+                  if (startX !== undefined) {
+                    const dx = e.changedTouches[0].clientX - startX;
+                    if (dx > 60) toggleTodo(todo.id);
+                    delete swipeStartX.current[todo.id];
+                  }
+                  setSwipingId(null);
+                  setSwipeOffset(0);
+                }}
+                style={{
+                position:"relative",overflow:"hidden",
                 display:"flex",alignItems:"flex-start",gap:10,
                 padding:"11px 12px",borderRadius:14,marginBottom:6,
                 background:overdue?"rgba(248,113,113,0.06)":todo.done?isLight?"rgba(0,0,0,0.02)":"rgba(255,255,255,0.02)":isLight?"rgba(0,0,0,0.03)":"rgba(255,255,255,0.04)",
                 border:`1px solid ${overdue?"rgba(248,113,113,0.2)":todayDue?"rgba(251,191,36,0.2)":t.border}`,
                 opacity:todo.done?0.5:1,
+                transform: `translateX(${swipeX}px)`,
+                transition: isSwiping ? "none" : "transform 0.2s ease, all 0.22s cubic-bezier(.4,0,.2,1)",
               }}>
+                {/* Swipe hint background */}
+                {isSwiping && swipeOffset > 20 && (
+                  <div style={{ position:"absolute",left:-swipeOffset,top:0,bottom:0,width:"100%",background:swipeOffset>60?"rgba(52,211,153,0.25)":"rgba(52,211,153,0.12)",display:"flex",alignItems:"center",paddingLeft:16,borderRadius:14,pointerEvents:"none" }}>
+                    <span style={{ fontSize:18,opacity: Math.min(1, (swipeOffset-20)/40) }}>✓</span>
+                  </div>
+                )}
                 <button onClick={()=>toggleTodo(todo.id)}
                   style={{ width:27,height:27,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:todo.done?"linear-gradient(135deg,#7c6af7,#a78bfa)":t.chipOff,color:todo.done?"#fff":t.sub,border:"none",marginTop:1 }}>
                   <CheckIcon done={todo.done}/>
@@ -1142,12 +1150,6 @@ export default function TodoApp() {
         </div>
       </div>
 
-      {/* Hamburger btn (mobile) - inject via style */}
-      <style>{`
-        @media (max-width:767px){
-          .hamburger-btn{display:flex!important;}
-        }
-      `}</style>
     </div>
   );
 }
