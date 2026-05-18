@@ -565,19 +565,13 @@ function Sidebar({ todos, currentView, onViewChange, themeId, onThemeChange, the
     today:    todos.filter(td => isToday(td.deadline) && !td.done).length,
     tomorrow: todos.filter(td => isTomorrow(td.deadline) && !td.done).length,
     week:     todos.filter(td => isThisWeek(td.deadline) && !td.done).length,
-    personal: todos.filter(td => td.tagId === "personal" && !td.done).length,
-    work:     todos.filter(td => td.tagId === "work" && !td.done).length,
   };
 
-  const dateItems = [
+  const navItems = [
     { id: "all",      label: "すべてのタスク", emoji: "📋", count: counts.all },
     { id: "today",    label: "今日",           emoji: "📅", count: counts.today },
     { id: "tomorrow", label: "明日",           emoji: "🌅", count: counts.tomorrow },
     { id: "week",     label: "今週",           emoji: "📆", count: counts.week },
-  ];
-  const tagItems = [
-    { id: "personal", label: "個人",  emoji: "👤", count: counts.personal },
-    { id: "work",     label: "仕事",  emoji: "💼", count: counts.work },
   ];
 
   const NavBtn = ({ item }) => (
@@ -635,11 +629,7 @@ function Sidebar({ todos, currentView, onViewChange, themeId, onThemeChange, the
 
         {/* Navigation */}
         <nav style={{ padding:"12px 10px", flex:1 }}>
-          {dateItems.map(item => <NavBtn key={item.id} item={item}/>)}
-          {/* Tag-based views */}
-          <div style={{ height:1, background:t.sidebarBorder, margin:"8px 4px" }}/>
-          <div style={{ fontSize:10, color:t.subDim, fontWeight:700, letterSpacing:1.5, padding:"4px 12px 4px", textTransform:"uppercase" }}>カテゴリ</div>
-          {tagItems.map(item => <NavBtn key={item.id} item={item}/>)}
+          {navItems.map(item => <NavBtn key={item.id} item={item}/>)}
         </nav>
 
         {/* Theme switcher */}
@@ -686,8 +676,10 @@ export default function TodoApp() {
   const [locLoading,  setLocLoading]  = useState(false);
   const [showLocModal,setShowLocModal]= useState(false);
   // Quick-add FAB
-  const [showFab,     setShowFab]     = useState(false);
-  const fabInputRef   = useRef(null);
+  const [showFab,   setShowFab]   = useState(false);
+  const [fabPos,    setFabPos]    = useState("right"); // "left" | "center" | "right"
+  const fabInputRef = useRef(null);
+  const fabDragRef  = useRef({ startX:0, dragged:false });
 
   const inputRef    = useRef(null);
   const nextId      = useRef(10);
@@ -885,8 +877,6 @@ export default function TodoApp() {
       case "today":    return todoList.filter(td => isToday(td.deadline));
       case "tomorrow": return todoList.filter(td => isTomorrow(td.deadline));
       case "week":     return todoList.filter(td => isThisWeek(td.deadline));
-      case "personal": return todoList.filter(td => td.tagId === "personal");
-      case "work":     return todoList.filter(td => td.tagId === "work");
       default:         return todoList;
     }
   };
@@ -909,7 +899,6 @@ export default function TodoApp() {
 
   const viewLabel = {
     all: "📋 すべてのタスク", today: "📅 今日", tomorrow: "🌅 明日", week: "📆 今週",
-    personal: "👤 個人", work: "💼 仕事",
   }[sideView] || "📋 すべてのタスク";
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -937,17 +926,16 @@ export default function TodoApp() {
         input,textarea,select{font-family:inherit;}
         input:focus,textarea:focus,select:focus{outline:none;}
         .sidebar-panel{display:flex;}
-        .hamburger-btn{display:none;}
-        .split-btn{display:flex;}
+        .menu-btn{display:flex;}
         @media (max-width:767px){
-          .sidebar-panel{display:none!important;}
-          .sidebar-panel.open{
-            display:flex!important;
-            position:fixed;left:0;top:0;bottom:0;z-index:100;width:240px;
+          .sidebar-panel{
+            position:fixed!important;left:0;top:0;bottom:0;z-index:100;
+            width:66.67vw!important;
+            transform:translateX(-100%);
+            transition:transform 0.3s cubic-bezier(.4,0,.2,1)!important;
           }
+          .sidebar-panel.open{transform:translateX(0)!important;}
           .sidebar-overlay{display:block!important;}
-          .hamburger-btn{display:flex!important;}
-          .split-btn{display:none!important;}
         }
       `}</style>
 
@@ -966,13 +954,13 @@ export default function TodoApp() {
           onThemeChange={setThemeId}
           theme={t}
           isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
+          onClose={() => { setSidebarOpen(false); setSplitView(false); }}
           splitView={splitView}
         />
       </div>
       {/* Overlay */}
       {sidebarOpen && (
-        <div onClick={() => setSidebarOpen(false)} style={{ position:"fixed",inset:0,zIndex:90,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(2px)" }} className="sidebar-overlay"/>
+        <div onClick={() => { setSidebarOpen(false); setSplitView(false); }} style={{ position:"fixed",inset:0,zIndex:90,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(2px)" }} className="sidebar-overlay"/>
       )}
 
       {/* Main content */}
@@ -980,17 +968,12 @@ export default function TodoApp() {
 
         {/* Header */}
         <div style={{ padding:"16px 20px 12px", background:t.headerCard, borderBottom:`1px solid ${t.border}`, display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:50 }}>
-          {/* Hamburger (mobile only) */}
-          <button onClick={() => setSidebarOpen(v=>!v)}
-            style={{ background:t.chipOff, border:"none", borderRadius:8, color:t.sub, padding:"8px 10px", fontSize:18, display:"none", alignItems:"center", justifyContent:"center", flexShrink:0 }}
-            className="hamburger-btn">
-            ≡
-          </button>
-          {/* Split-view toggle (desktop only) */}
-          <button onClick={() => setSplitView(v=>!v)}
-            title={splitView ? "サイドバーを縮む" : "サイドバーを広げる"}
-            style={{ background: splitView ? "rgba(124,106,247,0.18)" : t.chipOff, border: splitView ? "1px solid rgba(124,106,247,0.4)" : "1px solid transparent", borderRadius:8, color: splitView ? "#a78bfa" : t.sub, padding:"8px 10px", display:"none", alignItems:"center", justifyContent:"center", flexShrink:0 }}
-            className="split-btn">
+          {/* Menu / split-view toggle (all screens) */}
+          <button
+            onClick={() => { setSidebarOpen(v=>!v); setSplitView(v=>!v); }}
+            title={sidebarOpen ? "サイドバーを閉じる" : "サイドバーを開く"}
+            style={{ background: sidebarOpen ? "rgba(124,106,247,0.18)" : t.chipOff, border: sidebarOpen ? "1px solid rgba(124,106,247,0.4)" : "1px solid transparent", borderRadius:8, color: sidebarOpen ? "#a78bfa" : t.sub, padding:"8px 10px", display:"none", alignItems:"center", justifyContent:"center", flexShrink:0 }}
+            className="menu-btn">
             <SplitIcon/>
           </button>
           <div style={{ flex:1 }}>
@@ -1188,19 +1171,40 @@ export default function TodoApp() {
 
       {/* ── Floating Action Button ── */}
       <button
+        onTouchStart={e => {
+          fabDragRef.current = { startX: e.touches[0].clientX, dragged: false };
+        }}
+        onTouchMove={e => {
+          if (Math.abs(e.touches[0].clientX - fabDragRef.current.startX) > 20)
+            fabDragRef.current.dragged = true;
+        }}
+        onTouchEnd={e => {
+          e.preventDefault();
+          if (fabDragRef.current.dragged) {
+            const x = e.changedTouches[0].clientX, w = window.innerWidth;
+            setFabPos(x < w/3 ? "left" : x < w*2/3 ? "center" : "right");
+          } else {
+            setShowFab(v => !v);
+          }
+        }}
         onClick={() => setShowFab(v => !v)}
         style={{
-          position:"fixed", bottom:24, left:20, zIndex:140,
+          position:"fixed", bottom:24, zIndex:140,
+          ...(fabPos === "left"   ? { left:20 }
+            : fabPos === "center" ? { left:"calc(50% - 28px)" }
+            :                       { right:20 }),
           width:56, height:56, borderRadius:"50%",
           background: showFab ? "linear-gradient(135deg,#374151,#4b5563)" : "linear-gradient(135deg,#ef4444,#f87171)",
           color:"#fff", border:"none",
-          fontSize: showFab ? 22 : 28, fontWeight:300,
+          fontSize:28, fontWeight:300,
           display:"flex", alignItems:"center", justifyContent:"center",
           boxShadow: showFab ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 16px rgba(239,68,68,0.5)",
-          transition:"all 0.2s cubic-bezier(.4,0,.2,1)",
+          transition:"left 0.25s, right 0.25s, background 0.2s, transform 0.2s",
           transform: showFab ? "rotate(45deg)" : "rotate(0deg)",
+          touchAction:"none",
+          userSelect:"none",
         }}
-        title="タスクを追加">
+        title="タスクを追加（ドラッグで位置変更）">
         ＋
       </button>
 
