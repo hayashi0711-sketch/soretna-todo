@@ -1,0 +1,18 @@
+*, *::before, *::after {
+  box-sizing: border-box; margin: 0; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+html, body, #root { height: 100%; width: 100%; }
+body {
+  background: #0f0f13;
+  font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  overscroll-behavior: none;
+}
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+input, button, textarea, select { font-family: inherit; -webkit-appearance: none; appearance: none; }
+input:focus, textarea:focus, select:focus { outline: none; }

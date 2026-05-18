@@ -1,0 +1,730 @@
+import { useState, useRef, useEffect, useCallback } from "react";
+import { storage, haptics, requestNotificationPermission, scheduleDeadlineNotification, cancelNotification, requestSpeechPermission, startListening, addKeyboardListeners, addBackButtonListener } from "./capacitor-adapters";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+const PRESET_COLORS = ["#f87171","#fb923c","#fbbf24","#a3e635","#34d399","#22d3ee","#60a5fa","#a78bfa","#f472b6","#e2e8f0"];
+const PRIORITY_CONFIG = {
+  high:   { label: "高", color: "#f87171", bg: "rgba(248,113,113,0.12)", order: 0 },
+  medium: { label: "中", color: "#fbbf24", bg: "rgba(251,191,36,0.12)",  order: 1 },
+  low:    { label: "低", color: "#60a5fa", bg: "rgba(96,165,250,0.12)",  order: 2 },
+  none:   { label: "－", color: "#444",    bg: "transparent",            order: 3 },
+};
+const DEFAULT_TAGS = [
+  { id: "work",     label: "仕事", color: "#fbbf24" },
+  { id: "personal", label: "個人", color: "#34d399" },
+  { id: "urgent",   label: "急ぎ", color: "#f87171" },
+];
+const INITIAL_TODOS = [
+  { id: 1, text: "プロジェクトの資料を整理する", done: false, tagId: "work",     priority: "high",   deadline: null, createdAt: Date.now()-3000 },
+  { id: 2, text: "買い物リストを作る",           done: false, tagId: "personal", priority: "medium", deadline: null, createdAt: Date.now()-2000 },
+  { id: 3, text: "メールを返信する",             done: true,  tagId: "urgent",   priority: "low",    deadline: null, createdAt: Date.now()-1000 },
+];
+
+// ─── Theme Definitions ────────────────────────────────────────────────────────
+// Each theme: bg (outer), card (inner card), text, subtext, border, inputBg
+const THEMES = [
+  { id: "dark",    label: "ダーク",    emoji: "🌑", bg: "#0f0f13", card: "#16161d", headerCard: "#1a1a24", text: "#f0f0f0", sub: "#888", subDim: "#444", border: "rgba(255,255,255,0.06)", inputBg: "#1e1e28", inputBorder: "rgba(255,255,255,0.07)", chipOff: "rgba(255,255,255,0.05)", chipOffText: "#888", calBg: "#1e1e2e" },
+  { id: "navy",    label: "ネイビー",  emoji: "🌊", bg: "#0a0e1a", card: "#111827", headerCard: "#161e30", text: "#e8eaf0", sub: "#7a8aaa", subDim: "#3a4560", border: "rgba(100,130,200,0.12)", inputBg: "#1a2338", inputBorder: "rgba(100,130,200,0.15)", chipOff: "rgba(100,130,200,0.08)", chipOffText: "#7a8aaa", calBg: "#1a2338" },
+  { id: "forest",  label: "フォレスト",emoji: "🌿", bg: "#0b130d", card: "#121a14", headerCard: "#172019", text: "#e0ede2", sub: "#6a9470", subDim: "#2a4030", border: "rgba(80,160,100,0.12)", inputBg: "#1a2a1c", inputBorder: "rgba(80,160,100,0.15)", chipOff: "rgba(80,160,100,0.08)", chipOffText: "#6a9470", calBg: "#1a2a1c" },
+  { id: "rose",    label: "ローズ",    emoji: "🌸", bg: "#160d10", card: "#1e1218", headerCard: "#251520", text: "#f0e4e8", sub: "#b07080", subDim: "#50303a", border: "rgba(200,80,120,0.12)", inputBg: "#2a1820", inputBorder: "rgba(200,80,120,0.15)", chipOff: "rgba(200,80,120,0.08)", chipOffText: "#b07080", calBg: "#2a1820" },
+  { id: "light",   label: "ライト",    emoji: "☀️", bg: "#f0f2f8", card: "#ffffff", headerCard: "#f8f9fc", text: "#1a1a2e", sub: "#666888", subDim: "#aaaacc", border: "rgba(0,0,0,0.07)", inputBg: "#f0f2f8", inputBorder: "rgba(0,0,0,0.1)", chipOff: "rgba(0,0,0,0.06)", chipOffText: "#666888", calBg: "#f0f2f8" },
+  { id: "sand",    label: "サンド",    emoji: "🏖️", bg: "#1a1510", card: "#211c14", headerCard: "#28221a", text: "#f0e8d8", sub: "#a09070", subDim: "#504030", border: "rgba(180,140,80,0.15)", inputBg: "#2a2218", inputBorder: "rgba(180,140,80,0.18)", chipOff: "rgba(180,140,80,0.08)", chipOffText: "#a09070", calBg: "#2a2218" },
+];
+
+// Determine good text color for contrast on top of a given theme
+const getContrastText = (themeId) => themeId === "light" ? "#1a1a2e" : "#f0f0f0";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmtDate = (iso) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+};
+const isToday = (iso) => {
+  if (!iso) return false;
+  const d = new Date(iso), n = new Date();
+  return d.getFullYear()===n.getFullYear() && d.getMonth()===n.getMonth() && d.getDate()===n.getDate();
+};
+const isPast = (iso) => iso && new Date(iso) < new Date();
+
+// ─── Icons ────────────────────────────────────────────────────────────────────
+const CheckIcon = ({ done }) => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    {done && <polyline points="20 6 9 17 4 12" />}
+  </svg>
+);
+const TrashIcon = ({ size=14 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+    <path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+  </svg>
+);
+const EditIcon = ({ size=13 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </svg>
+);
+const TagIcon = ({ size=13 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
+    <line x1="7" y1="7" x2="7.01" y2="7"/>
+  </svg>
+);
+const MicIcon = ({ active }) => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill={active?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="9" y="2" width="6" height="11" rx="3"/>
+    <path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/>
+  </svg>
+);
+const CalIcon = ({ size=14 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+  </svg>
+);
+const ClockIcon = () => (
+  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+  </svg>
+);
+const XIcon = ({ size=16 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </svg>
+);
+const ChevronIcon = ({ dir="left" }) => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    {dir==="left" ? <polyline points="15 18 9 12 15 6"/> : <polyline points="9 18 15 12 9 6"/>}
+  </svg>
+);
+const PaletteIcon = () => (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
+    <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>
+    <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>
+    <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
+    <path d="M12 2C6.5 2 2 6.5 2 12a10 10 0 0010 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+  </svg>
+);
+
+// ─── Mini Calendar ─────────────────────────────────────────────────────────────
+function MiniCalendar({ value, onChange, theme }) {
+  const today = new Date();
+  const initDate = value ? new Date(value) : today;
+  const [viewYear,  setViewYear]  = useState(initDate.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initDate.getMonth());
+  const [selDate,   setSelDate]   = useState(value ? initDate.getDate() : null);
+  const [selHour,   setSelHour]   = useState(value ? initDate.getHours() : 9);
+  const [selMin,    setSelMin]    = useState(value ? initDate.getMinutes() : 0);
+  // ★ ref to scroll into view after calendar opens
+  const calRef = useRef(null);
+
+  useEffect(() => {
+    // Scroll the calendar into view smoothly so user sees the time picker
+    calRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, []);
+
+  const daysInMonth = new Date(viewYear, viewMonth+1, 0).getDate();
+  const firstDay    = new Date(viewYear, viewMonth, 1).getDay();
+  const DAYS   = ["日","月","火","水","木","金","土"];
+  const MONTHS = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+
+  const prevMonth = () => { if (viewMonth===0){setViewMonth(11);setViewYear(y=>y-1);}else setViewMonth(m=>m-1); setSelDate(null); };
+  const nextMonth = () => { if (viewMonth===11){setViewMonth(0);setViewYear(y=>y+1);}else setViewMonth(m=>m+1); setSelDate(null); };
+
+  const pick = (d) => { setSelDate(d); onChange(new Date(viewYear, viewMonth, d, selHour, selMin).toISOString()); };
+  const updateTime = (h, m) => {
+    setSelHour(h); setSelMin(m);
+    if (selDate) onChange(new Date(viewYear, viewMonth, selDate, h, m).toISOString());
+  };
+
+  const cells = [];
+  for (let i=0; i<firstDay; i++) cells.push(null);
+  for (let d=1; d<=daysInMonth; d++) cells.push(d);
+
+  const isSelDay   = (d) => selDate===d && viewYear===initDate.getFullYear() && viewMonth===initDate.getMonth();
+  const isTodayDay = (d) => d===today.getDate() && viewMonth===today.getMonth() && viewYear===today.getFullYear();
+
+  const t = theme;
+  const isLight = t.id === "light";
+
+  return (
+    <div ref={calRef} style={{ background: t.calBg, borderRadius:16, padding:"14px", border:`1px solid ${t.border}` }}>
+      {/* Month nav */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+        <button onClick={prevMonth} style={{ background: isLight?"rgba(0,0,0,0.06)":"rgba(255,255,255,0.06)", border:"none", borderRadius:8, color: t.sub, cursor:"pointer", padding:"5px 8px", display:"flex" }}><ChevronIcon dir="left"/></button>
+        <span style={{ color: t.text, fontWeight:700, fontSize:14 }}>{viewYear}年 {MONTHS[viewMonth]}</span>
+        <button onClick={nextMonth} style={{ background: isLight?"rgba(0,0,0,0.06)":"rgba(255,255,255,0.06)", border:"none", borderRadius:8, color: t.sub, cursor:"pointer", padding:"5px 8px", display:"flex" }}><ChevronIcon dir="right"/></button>
+      </div>
+      {/* Day headers */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, marginBottom:4 }}>
+        {DAYS.map((d,i)=>(
+          <div key={d} style={{ textAlign:"center", fontSize:11, color: i===0?"#f87171":i===6?"#60a5fa": t.sub, padding:"2px 0" }}>{d}</div>
+        ))}
+      </div>
+      {/* Date cells */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 }}>
+        {cells.map((d,i)=>(
+          <div key={i} onClick={d?()=>pick(d):undefined} style={{
+            textAlign:"center", padding:"7px 2px", fontSize:13, borderRadius:8, cursor: d?"pointer":"default",
+            background: d && isSelDay(d)   ? "linear-gradient(135deg,#7c6af7,#a78bfa)"
+                      : d && isTodayDay(d) ? "rgba(124,106,247,0.2)"
+                      : "transparent",
+            color: d && isSelDay(d)   ? "#fff"
+                 : d && isTodayDay(d) ? "#a78bfa"
+                 : d                  ? t.text
+                 : "transparent",
+            fontWeight: d && (isSelDay(d)||isTodayDay(d)) ? 700 : 400,
+          }}>{d||""}</div>
+        ))}
+      </div>
+      {/* Time picker */}
+      <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${t.border}`, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+        <ClockIcon/>
+        <span style={{ color: t.sub, fontSize:12 }}>時間:</span>
+        <select value={selHour} onChange={e=>updateTime(Number(e.target.value),selMin)}
+          style={{ background: isLight?"rgba(0,0,0,0.06)":"rgba(255,255,255,0.07)", border:`1px solid ${t.border}`, borderRadius:8, color: t.text, padding:"5px 8px", fontSize:13, outline:"none" }}>
+          {Array.from({length:24},(_,i)=><option key={i} value={i}>{String(i).padStart(2,"0")}</option>)}
+        </select>
+        <span style={{ color: t.sub }}>:</span>
+        <select value={selMin} onChange={e=>updateTime(selHour,Number(e.target.value))}
+          style={{ background: isLight?"rgba(0,0,0,0.06)":"rgba(255,255,255,0.07)", border:`1px solid ${t.border}`, borderRadius:8, color: t.text, padding:"5px 8px", fontSize:13, outline:"none" }}>
+          {[0,5,10,15,20,25,30,35,40,45,50,55].map(m=><option key={m} value={m}>{String(m).padStart(2,"0")}</option>)}
+        </select>
+        {/* ★ confirm badge */}
+        {selDate && <span style={{ fontSize:11, color:"#a78bfa", marginLeft:"auto" }}>✓ {viewMonth+1}/{selDate} {String(selHour).padStart(2,"0")}:{String(selMin).padStart(2,"0")}</span>}
+      </div>
+      {/* Hint */}
+      <div style={{ marginTop:8, fontSize:11, color: t.subDim, textAlign:"center" }}>
+        ↑ 日付を選んで時間を設定してください
+      </div>
+      {value && (
+        <button onClick={()=>onChange(null)} style={{ marginTop:8, width:"100%", background:"rgba(248,113,113,0.1)", border:"none", borderRadius:10, color:"#f87171", fontSize:12, padding:"8px 0", cursor:"pointer" }}>
+          締め切りを削除
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Tag Editor Modal ──────────────────────────────────────────────────────────
+function TagEditorModal({ tags, onClose, onSave, theme }) {
+  const [localTags, setLocalTags] = useState(tags.map(t=>({...t})));
+  const [newLabel,  setNewLabel]  = useState("");
+  const [newColor,  setNewColor]  = useState(PRESET_COLORS[6]);
+  const [editingId, setEditingId] = useState(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editColor, setEditColor] = useState("");
+  const nid = useRef(Date.now());
+  const t = theme;
+  const addTag  = () => { if(!newLabel.trim()) return; setLocalTags(p=>[...p,{id:`tag_${nid.current++}`,label:newLabel.trim(),color:newColor}]); setNewLabel(""); };
+  const startEdit = tag => { setEditingId(tag.id); setEditLabel(tag.label); setEditColor(tag.color); };
+  const saveEdit  = () => { if(!editLabel.trim()) return; setLocalTags(p=>p.map(x=>x.id===editingId?{...x,label:editLabel.trim(),color:editColor}:x)); setEditingId(null); };
+  return (
+    <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
+      <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:360,boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}` }} onClick={e=>e.stopPropagation()}>
+        <div style={{ padding:"18px 20px 14px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+          <div style={{ display:"flex",alignItems:"center",gap:8,color:t.sub }}><TagIcon/><span style={{ fontSize:15,fontWeight:700,color:t.text }}>タグを管理</span></div>
+          <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
+        </div>
+        <div style={{ maxHeight:260,overflowY:"auto",padding:"12px 16px" }}>
+          {localTags.map(tag=>(
+            <div key={tag.id} style={{ marginBottom:8 }}>
+              {editingId===tag.id ? (
+                <div style={{ background:t.inputBg,borderRadius:12,padding:12 }}>
+                  <input autoFocus value={editLabel} onChange={e=>setEditLabel(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveEdit()} style={{ width:"100%",background:t.chipOff,border:`1px solid ${t.inputBorder}`,borderRadius:8,padding:"7px 10px",color:t.text,fontSize:13,fontFamily:"inherit",marginBottom:10,outline:"none" }}/>
+                  <div style={{ display:"flex",gap:5,flexWrap:"wrap",marginBottom:10 }}>
+                    {PRESET_COLORS.map(c=><div key={c} onClick={()=>setEditColor(c)} style={{ width:22,height:22,borderRadius:6,background:c,cursor:"pointer",border:editColor===c?"2px solid #fff":"2px solid transparent" }}/>)}
+                  </div>
+                  <div style={{ display:"flex",gap:6 }}>
+                    <button onClick={saveEdit} style={{ flex:1,background:"linear-gradient(135deg,#7c6af7,#a78bfa)",border:"none",borderRadius:8,color:"#fff",fontSize:12,fontWeight:700,padding:"8px 0",cursor:"pointer",fontFamily:"inherit" }}>保存</button>
+                    <button onClick={()=>setEditingId(null)} style={{ flex:1,background:t.chipOff,border:"none",borderRadius:8,color:t.sub,fontSize:12,padding:"8px 0",cursor:"pointer",fontFamily:"inherit" }}>キャンセル</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display:"flex",alignItems:"center",gap:10,background:t.inputBg,borderRadius:10,padding:"10px 12px",border:`1px solid ${t.border}` }}>
+                  <div style={{ width:10,height:10,borderRadius:3,background:tag.color,flexShrink:0 }}/>
+                  <span style={{ flex:1,fontSize:13,color:t.text }}>{tag.label}</span>
+                  <button onClick={()=>startEdit(tag)} style={{ background:"transparent",border:"none",cursor:"pointer",color:t.sub,padding:4,borderRadius:6,display:"flex" }}><EditIcon/></button>
+                  <button onClick={()=>setLocalTags(p=>p.filter(x=>x.id!==tag.id))} style={{ background:"transparent",border:"none",cursor:"pointer",color:t.sub,padding:4,borderRadius:6,display:"flex" }}><TrashIcon size={13}/></button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div style={{ padding:"12px 16px",borderTop:`1px solid ${t.border}` }}>
+          <div style={{ display:"flex",gap:6,marginBottom:8 }}>
+            <input value={newLabel} onChange={e=>setNewLabel(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTag()} placeholder="新しいタグ名…" style={{ flex:1,background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:9,padding:"8px 12px",color:t.text,fontSize:13,fontFamily:"inherit",outline:"none" }}/>
+            <button onClick={addTag} style={{ background:"linear-gradient(135deg,#7c6af7,#a78bfa)",border:"none",borderRadius:9,color:"#fff",padding:"8px 14px",cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"inherit" }}>＋</button>
+          </div>
+          <div style={{ display:"flex",gap:5,flexWrap:"wrap" }}>
+            {PRESET_COLORS.map(c=><div key={c} onClick={()=>setNewColor(c)} style={{ width:22,height:22,borderRadius:7,background:c,cursor:"pointer",border:newColor===c?"2px solid #fff":"2px solid transparent" }}/>)}
+          </div>
+        </div>
+        <div style={{ padding:"12px 16px 16px",display:"flex",gap:8 }}>
+          <button onClick={()=>onSave(localTags)} style={{ flex:1,background:"linear-gradient(135deg,#7c6af7,#a78bfa)",border:"none",borderRadius:11,color:"#fff",fontSize:13,fontWeight:700,padding:"11px 0",cursor:"pointer",fontFamily:"inherit" }}>保存して閉じる</button>
+          <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:11,color:t.sub,fontSize:13,padding:"11px 16px",cursor:"pointer",fontFamily:"inherit" }}>キャンセル</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Todo Detail Modal ─────────────────────────────────────────────────────────
+function TodoDetailModal({ todo, tags, onClose, onSave, theme }) {
+  const [text,     setText]     = useState(todo.text);
+  const [tagId,    setTagId]    = useState(todo.tagId);
+  const [priority, setPriority] = useState(todo.priority||"none");
+  const [deadline, setDeadline] = useState(todo.deadline||null);
+  const [showCal,  setShowCal]  = useState(false);
+  const t = theme;
+  return (
+    <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
+      <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:380,boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}`,maxHeight:"90vh",overflowY:"auto" }} onClick={e=>e.stopPropagation()}>
+        <div style={{ padding:"18px 20px 14px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+          <span style={{ fontSize:15,fontWeight:700,color:t.text }}>タスクを編集</span>
+          <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
+        </div>
+        <div style={{ padding:"16px 20px" }}>
+          <textarea value={text} onChange={e=>setText(e.target.value)} rows={3} style={{ width:"100%",background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:12,padding:"10px 14px",color:t.text,fontSize:14,fontFamily:"inherit",outline:"none",resize:"none",lineHeight:1.6 }}/>
+          <div style={{ marginTop:12 }}>
+            <div style={{ fontSize:11,color:t.sub,fontWeight:600,letterSpacing:1,marginBottom:6 }}>タグ</div>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+              {tags.map(tg=>(
+                <button key={tg.id} onClick={()=>setTagId(tg.id)} style={{ background:tagId===tg.id?tg.color:t.chipOff,color:tagId===tg.id?"#111":t.sub,border:"none",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit" }}>{tg.label}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginTop:12 }}>
+            <div style={{ fontSize:11,color:t.sub,fontWeight:600,letterSpacing:1,marginBottom:6 }}>優先度</div>
+            <div style={{ display:"flex",gap:6 }}>
+              {Object.entries(PRIORITY_CONFIG).filter(([k])=>k!=="none").map(([k,v])=>(
+                <button key={k} onClick={()=>setPriority(k)} style={{ flex:1,background:priority===k?v.bg:t.chipOff,color:priority===k?v.color:t.sub,border:priority===k?`1px solid ${v.color}40`:"1px solid transparent",borderRadius:9,padding:"7px 0",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit" }}>{v.label}</button>
+              ))}
+              <button onClick={()=>setPriority("none")} style={{ flex:1,background:priority==="none"?t.inputBg:t.chipOff,color:priority==="none"?t.text:t.sub,border:priority==="none"?`1px solid ${t.inputBorder}`:"1px solid transparent",borderRadius:9,padding:"7px 0",fontSize:12,cursor:"pointer",fontFamily:"inherit" }}>なし</button>
+            </div>
+          </div>
+          <div style={{ marginTop:12 }}>
+            <div style={{ fontSize:11,color:t.sub,fontWeight:600,letterSpacing:1,marginBottom:6 }}>締め切り</div>
+            <button onClick={()=>setShowCal(v=>!v)} style={{ width:"100%",background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:12,padding:"10px 14px",color:deadline?t.text:t.sub,fontSize:13,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:8 }}>
+              <CalIcon/> {deadline ? fmtDate(deadline) : "日時を選択…"}
+            </button>
+            {showCal && <div style={{ marginTop:8 }}><MiniCalendar value={deadline} onChange={setDeadline} theme={t}/></div>}
+          </div>
+        </div>
+        <div style={{ padding:"0 20px 20px",display:"flex",gap:8 }}>
+          <button onClick={()=>onSave({...todo,text:text.trim()||todo.text,tagId,priority,deadline})} style={{ flex:1,background:"linear-gradient(135deg,#7c6af7,#a78bfa)",border:"none",borderRadius:12,color:"#fff",fontSize:14,fontWeight:700,padding:"12px 0",cursor:"pointer",fontFamily:"inherit" }}>保存</button>
+          <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:12,color:t.sub,fontSize:14,padding:"12px 16px",cursor:"pointer",fontFamily:"inherit" }}>キャンセル</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Assistant Character ───────────────────────────────────────────────────────
+// ★ Clicking anywhere on the bubble dismisses it (no × button)
+function Assistant({ todos, onDismiss, notification }) {
+  const todayTodos = todos.filter(t => isToday(t.deadline));
+  const allDoneToday = todayTodos.length > 0 && todayTodos.every(t => t.done);
+  const msg = notification || (allDoneToday ? "今日の締め切りタスクを全部終わらせました！お疲れさまでした🎉" : null);
+  if (!msg) return null;
+  return (
+    <div
+      onClick={onDismiss}
+      title="タップして閉じる"
+      style={{ position:"fixed",bottom:24,right:16,zIndex:300,display:"flex",alignItems:"flex-end",gap:10,cursor:"pointer",animation:"bounceIn 0.5s cubic-bezier(.2,1.6,.4,1)" }}
+    >
+      <div style={{ background:"#1e1e2e",borderRadius:"18px 18px 4px 18px",padding:"12px 16px",maxWidth:220,boxShadow:"0 8px 32px rgba(0,0,0,0.5)",border:"1px solid rgba(124,106,247,0.3)",userSelect:"none" }}>
+        <p style={{ margin:0,fontSize:12,color:"#ccc",lineHeight:1.7 }}>{msg}</p>
+        <p style={{ margin:"6px 0 0",fontSize:10,color:"rgba(124,106,247,0.6)" }}>タップして閉じる</p>
+      </div>
+      <div style={{ fontSize:36,userSelect:"none",filter:"drop-shadow(0 4px 8px rgba(0,0,0,0.5))",flexShrink:0 }}>🐱</div>
+      <style>{`@keyframes bounceIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}`}</style>
+    </div>
+  );
+}
+
+// ─── Theme Switcher Bar ───────────────────────────────────────────────────────
+function ThemeSwitcher({ currentThemeId, onChange }) {
+  return (
+    <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+      {THEMES.map(th => (
+        <button
+          key={th.id}
+          onClick={() => onChange(th.id)}
+          title={th.label}
+          style={{
+            width: 28, height: 28, borderRadius: "50%",
+            background: th.bg,
+            border: currentThemeId === th.id ? "2.5px solid #7c6af7" : "2.5px solid rgba(255,255,255,0.15)",
+            cursor: "pointer",
+            fontSize: 13,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: currentThemeId === th.id ? "0 0 0 3px rgba(124,106,247,0.3)" : "none",
+            transition: "all 0.15s",
+            flexShrink: 0,
+          }}
+        >
+          {th.emoji}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Main App ──────────────────────────────────────────────────────────────────
+
+export default function TodoApp() {
+  const [themeId,     setThemeId]     = useState("dark");
+  const [tags,        setTags]        = useState(DEFAULT_TAGS);
+  const [todos,       setTodos]       = useState(INITIAL_TODOS);
+  const [input,       setInput]       = useState("");
+  const [selectedTag, setSelectedTag] = useState("personal");
+  const [priority,    setPriority]    = useState("none");
+  const [deadline,    setDeadline]    = useState(null);
+  const [filter,      setFilter]      = useState("all");
+  const [sortBy,      setSortBy]      = useState("created");
+  const [showDone,    setShowDone]    = useState(true);
+  const [animId,      setAnimId]      = useState(null);
+  const [showTagEd,   setShowTagEd]   = useState(false);
+  const [editTodo,    setEditTodo]    = useState(null);
+  const [showCal,     setShowCal]     = useState(false);
+  const [listening,   setListening]   = useState(false);
+  const [notification,setNotification]= useState(null);
+  const [kbHeight,    setKbHeight]    = useState(0);
+  const [loaded,      setLoaded]      = useState(false);
+
+  const inputRef    = useRef(null);
+  const nextId      = useRef(10);
+  const stopVoice   = useRef(null);
+  const notifMap    = useRef({});
+  const notifTimer  = useRef(null);
+
+  const theme   = THEMES.find(t => t.id === themeId) || THEMES[0];
+  const isLight = theme.id === "light";
+  const t       = theme;
+
+  // ── Init: load persisted data + Capacitor setup ────────────────────────────
+  useEffect(() => {
+    const init = async () => {
+      // Load saved state
+      const [sTheme, sTags, sTodos, sNextId, sSelTag] = await Promise.all([
+        storage.get("themeId",  "dark"),
+        storage.get("tags",     DEFAULT_TAGS),
+        storage.get("todos",    INITIAL_TODOS),
+        storage.get("nextId",   10),
+        storage.get("selTag",   "personal"),
+      ]);
+      setThemeId(sTheme);
+      setTags(sTags);
+      setTodos(sTodos);
+      nextId.current = sNextId;
+      setSelectedTag(sSelTag);
+      setLoaded(true);
+
+      // Capacitor-native setup
+      await requestNotificationPermission();
+      await requestSpeechPermission();
+
+      // Keyboard height listener
+      const removeKb = await addKeyboardListeners(
+        h => setKbHeight(h),
+        () => setKbHeight(0)
+      );
+      return removeKb;
+    };
+
+    let cleanup = () => {};
+    init().then(fn => { if (fn) cleanup = fn; });
+    return () => cleanup();
+  }, []);
+
+  // Back button (Android)
+  useEffect(() => {
+    let remove = () => {};
+    addBackButtonListener(() => {
+      if (showTagEd) { setShowTagEd(false); return; }
+      if (editTodo)  { setEditTodo(null);   return; }
+      if (showCal)   { setShowCal(false);   return; }
+      inputRef.current?.blur();
+    }).then(fn => { remove = fn; });
+    return () => remove();
+  }, [showTagEd, editTodo, showCal]);
+
+  // ── Persist on change ─────────────────────────────────────────────────────
+  useEffect(() => { if (loaded) storage.set("themeId", themeId); }, [themeId, loaded]);
+  useEffect(() => { if (loaded) storage.set("tags",    tags);    }, [tags,    loaded]);
+  useEffect(() => { if (loaded) { storage.set("todos", todos); storage.set("nextId", nextId.current); } }, [todos, loaded]);
+  useEffect(() => { if (loaded) storage.set("selTag",  selectedTag); }, [selectedTag, loaded]);
+
+  // ── Tag validity guard ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!tags.find(tg => tg.id === selectedTag) && tags.length > 0) setSelectedTag(tags[0].id);
+    if (filter !== "all" && !tags.find(tg => tg.id === filter)) setFilter("all");
+  }, [tags]);
+
+  // ── Native deadline notifications ─────────────────────────────────────────
+  useEffect(() => {
+    if (!loaded) return;
+    todos.forEach(async todo => {
+      if (!todo.done && todo.deadline) {
+        if (notifMap.current[todo.id]) await cancelNotification(notifMap.current[todo.id]);
+        await scheduleDeadlineNotification(todo, 30);
+        notifMap.current[todo.id] = todo.id;
+      }
+    });
+  }, [todos, loaded]);
+
+  // ── In-app 30-min reminder (fallback when app is open) ───────────────────
+  useEffect(() => {
+    notifTimer.current = setInterval(() => {
+      const now = new Date();
+      todos.forEach(todo => {
+        if (!todo.done && todo.deadline) {
+          const diff = (new Date(todo.deadline) - now) / 60000;
+          if (diff > 0 && diff <= 30)
+            setNotification(`「${todo.text}」の締め切りまで約${Math.ceil(diff)}分です！⏰`);
+        }
+      });
+    }, 60000);
+    return () => clearInterval(notifTimer.current);
+  }, [todos]);
+
+  // ── Voice input ───────────────────────────────────────────────────────────
+  const toggleVoice = useCallback(async () => {
+    if (listening) { stopVoice.current?.(); setListening(false); return; }
+    await haptics.light();
+    setListening(true);
+    stopVoice.current = startListening({
+      onResult: text => setInput(prev => prev + text),
+      onEnd:    () => setListening(false),
+      onError:  e  => {
+        setListening(false);
+        if (e === "unsupported")
+          alert("このブラウザは音声入力に対応していません（ChromeかSafariをお使いください）");
+      },
+    });
+  }, [listening]);
+
+  // ── CRUD ──────────────────────────────────────────────────────────────────
+  const addTodo = useCallback(async () => {
+    const text = input.trim();
+    if (!text || !selectedTag) return;
+    await haptics.light();
+    setTodos(prev => [{
+      id: nextId.current++, text, done: false,
+      tagId: selectedTag, priority, deadline, createdAt: Date.now()
+    }, ...prev]);
+    setInput(""); setDeadline(null); setPriority("none"); setShowCal(false);
+    inputRef.current?.focus();
+  }, [input, selectedTag, priority, deadline]);
+
+  const toggleTodo = async id => {
+    const todo = todos.find(t => t.id === id);
+    await (todo?.done ? haptics.light() : haptics.success());
+    setAnimId(id); setTimeout(() => setAnimId(null), 400);
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  };
+
+  const deleteTodo = async id => {
+    await haptics.medium();
+    if (notifMap.current[id]) { await cancelNotification(notifMap.current[id]); delete notifMap.current[id]; }
+    setTodos(prev => prev.filter(t => t.id !== id));
+  };
+
+  const saveEdit = async updated => {
+    await haptics.success();
+    setTodos(prev => prev.map(t => t.id === updated.id ? updated : t));
+    setEditTodo(null);
+  };
+
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const getTag = id => tags.find(tg => tg.id === id);
+  const filtered = todos
+    .filter(t => (filter === "all" || t.tagId === filter) && (showDone || !t.done))
+    .sort((a, b) => {
+      if (sortBy === "priority") return (PRIORITY_CONFIG[a.priority||"none"].order) - (PRIORITY_CONFIG[b.priority||"none"].order);
+      if (sortBy === "deadline") {
+        if (!a.deadline && !b.deadline) return 0;
+        if (!a.deadline) return 1; if (!b.deadline) return -1;
+        return new Date(a.deadline) - new Date(b.deadline);
+      }
+      return b.createdAt - a.createdAt;
+    });
+
+  const doneCount  = todos.filter(t => t.done).length;
+  const totalCount = todos.length;
+  const progress   = totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100);
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div style={{
+      minHeight: "100svh", background: t.bg,
+      display: "flex", alignItems: "flex-start", justifyContent: "center",
+      fontFamily: "'Noto Sans JP','Hiragino Sans',sans-serif",
+      padding: `16px 12px ${32 + kbHeight}px`,
+      transition: "background 0.3s, padding-bottom 0.25s",
+    }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        ::-webkit-scrollbar{width:3px;} ::-webkit-scrollbar-thumb{background:#333;border-radius:2px;}
+        .todo-item{transition:all 0.22s cubic-bezier(.4,0,.2,1);}
+        .todo-item:hover .del-btn{opacity:1!important;}
+        .del-btn{transition:opacity 0.15s;}
+        @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.14)}100%{transform:scale(1)}}
+        .pop{animation:pop 0.35s cubic-bezier(.4,0,.2,1);}
+        @keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+        .slide-in{animation:slideIn 0.22s ease forwards;}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+        .pulse{animation:pulse 1s ease-in-out infinite;}
+        button{cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;}
+        input,textarea,select{font-family:inherit;}
+        input:focus,textarea:focus,select:focus{outline:none;}
+      `}</style>
+
+      {showTagEd && <TagEditorModal tags={tags} onClose={() => setShowTagEd(false)} onSave={tgs => { setTags(tgs); setShowTagEd(false); }} theme={t}/>}
+      {editTodo  && <TodoDetailModal todo={editTodo} tags={tags} onClose={() => setEditTodo(null)} onSave={saveEdit} theme={t}/>}
+      <Assistant todos={todos} onDismiss={() => setNotification(null)} notification={notification}/>
+
+      <div style={{ width:"100%", maxWidth:480, background:t.card, borderRadius:24, overflow:"hidden", boxShadow:"0 32px 80px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.04)", transition:"background 0.3s" }}>
+
+        {/* Header */}
+        <div style={{ padding:"20px 20px 14px", background:t.headerCard, borderBottom:`1px solid ${t.border}` }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10, flexWrap:"wrap", gap:8 }}>
+            <div>
+              <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:t.sub, letterSpacing:3, marginBottom:2 }}>MY TASKS</div>
+              <h1 style={{ fontSize:22, fontWeight:700, color:t.text, letterSpacing:-0.5, lineHeight:1 }}>
+                それな！<span style={{ color:"#7c6af7" }}>Todo</span>
+              </h1>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <PaletteIcon/>
+                <ThemeSwitcher currentThemeId={themeId} onChange={setThemeId}/>
+              </div>
+              <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
+                <span style={{ fontFamily:"'Space Mono',monospace", fontSize:20, fontWeight:700, color:"#7c6af7", lineHeight:1 }}>{progress}<span style={{ fontSize:10,color:t.subDim }}>%</span></span>
+                <span style={{ fontSize:11,color:t.sub }}>{doneCount}/{totalCount} 完了</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ height:4, background:isLight?"rgba(0,0,0,0.08)":"#252530", borderRadius:4, overflow:"hidden" }}>
+            <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#7c6af7,#a78bfa)", borderRadius:4, transition:"width 0.5s cubic-bezier(.4,0,.2,1)" }}/>
+          </div>
+        </div>
+
+        {/* Input */}
+        <div style={{ padding:"14px 14px 10px", borderBottom:`1px solid ${t.border}` }}>
+          <div style={{ display:"flex", gap:8, background:t.inputBg, borderRadius:14, padding:"4px 6px 4px 14px", border:`1px solid ${t.inputBorder}`, alignItems:"center" }}>
+            <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTodo()}
+              placeholder={listening?"聞いています…":"新しいタスクを入力…"} enterKeyHint="done"
+              style={{ flex:1,background:"transparent",border:"none",color:t.text,fontSize:14,padding:"10px 0",minWidth:0 }}/>
+            <button onClick={toggleVoice} className={listening?"pulse":""}
+              style={{ background:listening?"rgba(248,113,113,0.2)":t.chipOff,border:"none",borderRadius:9,color:listening?"#f87171":t.sub,padding:"9px 10px",display:"flex",alignItems:"center",flexShrink:0 }}>
+              <MicIcon active={listening}/>
+            </button>
+            <button onClick={()=>setShowCal(v=>!v)}
+              style={{ background:deadline?"rgba(124,106,247,0.2)":t.chipOff,border:"none",borderRadius:9,color:deadline?"#a78bfa":t.sub,padding:"9px 10px",display:"flex",alignItems:"center",flexShrink:0 }}>
+              <CalIcon size={15}/>
+            </button>
+            <button onClick={addTodo}
+              style={{ background:"linear-gradient(135deg,#7c6af7,#a78bfa)",color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:13,fontWeight:700,whiteSpace:"nowrap",flexShrink:0 }}>
+              ＋ 追加
+            </button>
+          </div>
+
+          {showCal && (
+            <div style={{ marginTop:8 }}>
+              <MiniCalendar value={deadline} onChange={v=>setDeadline(v)} theme={t}/>
+              {deadline && (
+                <div style={{ marginTop:6,display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"rgba(124,106,247,0.1)",borderRadius:10 }}>
+                  <CalIcon size={12}/><span style={{ fontSize:12,color:"#a78bfa" }}>締め切り: {fmtDate(deadline)}</span>
+                  <button onClick={()=>setDeadline(null)} style={{ background:"transparent",border:"none",color:t.sub,marginLeft:"auto",display:"flex",padding:2 }}><XIcon size={12}/></button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ display:"flex",gap:6,marginTop:10,flexWrap:"wrap",alignItems:"center" }}>
+            {tags.map(tg=>(
+              <button key={tg.id} onClick={()=>setSelectedTag(tg.id)}
+                style={{ background:selectedTag===tg.id?tg.color:t.chipOff,color:selectedTag===tg.id?"#111":t.chipOffText,border:"none",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600 }}>{tg.label}</button>
+            ))}
+            <div style={{ width:"1px",height:16,background:t.border,margin:"0 2px" }}/>
+            {["high","medium","low"].map(k=>{
+              const v=PRIORITY_CONFIG[k];
+              return <button key={k} onClick={()=>setPriority(priority===k?"none":k)}
+                style={{ background:priority===k?v.bg:t.chipOff,color:priority===k?v.color:t.sub,border:priority===k?`1px solid ${v.color}50`:"1px solid transparent",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700 }}>{v.label}</button>;
+            })}
+            <button onClick={()=>setShowTagEd(true)}
+              style={{ background:t.chipOff,color:t.sub,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,display:"flex",alignItems:"center",gap:4,marginLeft:"auto" }}>
+              <TagIcon size={11}/> タグ管理
+            </button>
+          </div>
+        </div>
+
+        {/* Filter + Sort */}
+        <div style={{ padding:"9px 12px",display:"flex",gap:5,alignItems:"center",borderBottom:`1px solid ${t.border}`,overflowX:"auto" }}>
+          {[{id:"all",label:"すべて"},...tags].map(tg=>(
+            <button key={tg.id} onClick={()=>setFilter(tg.id)}
+              style={{ background:filter===tg.id?"rgba(124,106,247,0.18)":"transparent",color:filter===tg.id?"#a78bfa":t.sub,border:filter===tg.id?"1px solid rgba(124,106,247,0.35)":"1px solid transparent",borderRadius:8,padding:"4px 11px",fontSize:12,fontWeight:500,whiteSpace:"nowrap" }}>{tg.label}</button>
+          ))}
+          <div style={{ marginLeft:"auto",display:"flex",gap:4,flexShrink:0 }}>
+            {[{k:"created",l:"新着"},{k:"priority",l:"優先度"},{k:"deadline",l:"期限"}].map(({k,l})=>(
+              <button key={k} onClick={()=>setSortBy(k)}
+                style={{ background:sortBy===k?isLight?"rgba(0,0,0,0.07)":"rgba(255,255,255,0.08)":"transparent",color:sortBy===k?t.text:t.subDim,border:"none",borderRadius:7,padding:"3px 8px",fontSize:11 }}>{l}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Todo list */}
+        <div style={{ maxHeight:"min(420px,50vh)",overflowY:"auto",padding:"10px 10px 16px" }}>
+          {filtered.length===0 && <div style={{ textAlign:"center",color:t.subDim,fontSize:13,padding:"36px 0" }}>タスクがありません 🎉</div>}
+          {filtered.map(todo=>{
+            const tag    = getTag(todo.tagId);
+            const color  = tag?.color ?? "#e2e8f0";
+            const pConf  = PRIORITY_CONFIG[todo.priority||"none"];
+            const overdue   = !todo.done && isPast(todo.deadline);
+            const todayDue  = !todo.done && isToday(todo.deadline) && !overdue;
+            return (
+              <div key={todo.id} className={`todo-item slide-in${animId===todo.id?" pop":""}`} style={{
+                display:"flex",alignItems:"flex-start",gap:10,
+                padding:"11px 12px",borderRadius:14,marginBottom:6,
+                background:overdue?"rgba(248,113,113,0.06)":todo.done?isLight?"rgba(0,0,0,0.02)":"rgba(255,255,255,0.02)":isLight?"rgba(0,0,0,0.03)":"rgba(255,255,255,0.04)",
+                border:`1px solid ${overdue?"rgba(248,113,113,0.2)":todayDue?"rgba(251,191,36,0.2)":t.border}`,
+                opacity:todo.done?0.5:1,
+              }}>
+                <button onClick={()=>toggleTodo(todo.id)}
+                  style={{ width:27,height:27,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:todo.done?"linear-gradient(135deg,#7c6af7,#a78bfa)":t.chipOff,color:todo.done?"#fff":t.sub,border:"none",marginTop:1 }}>
+                  <CheckIcon done={todo.done}/>
+                </button>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontSize:14,color:todo.done?t.sub:t.text,textDecoration:todo.done?"line-through":"none",wordBreak:"break-word",lineHeight:1.5 }}>{todo.text}</div>
+                  <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5,alignItems:"center" }}>
+                    {tag && <span style={{ fontSize:10,fontWeight:600,color,background:`${color}18`,borderRadius:5,padding:"1px 7px" }}>{tag.label}</span>}
+                    {todo.priority&&todo.priority!=="none"&&<span style={{ fontSize:10,fontWeight:700,color:pConf.color,background:pConf.bg,borderRadius:5,padding:"1px 7px" }}>{pConf.label}優先</span>}
+                    {todo.deadline&&<span style={{ fontSize:10,color:overdue?"#f87171":todayDue?"#fbbf24":t.sub,display:"flex",alignItems:"center",gap:3 }}><ClockIcon/>{fmtDate(todo.deadline)}{overdue?" 期限切れ":todayDue?" 今日期限":""}</span>}
+                  </div>
+                </div>
+                <div style={{ display:"flex",gap:4,flexShrink:0,marginTop:1 }}>
+                  <button onClick={()=>setEditTodo(todo)} style={{ background:t.chipOff,border:"none",color:t.sub,padding:"5px 6px",borderRadius:7,display:"flex" }}><EditIcon size={12}/></button>
+                  <button className="del-btn" onClick={()=>deleteTodo(todo.id)} style={{ background:"rgba(248,113,113,0.08)",border:"none",color:"#f87171",opacity:0,padding:"5px 6px",borderRadius:7,display:"flex" }}><TrashIcon size={12}/></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:"10px 16px 14px",borderTop:`1px solid ${t.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+          <span style={{ fontSize:11,color:t.subDim,fontFamily:"'Space Mono',monospace" }}>{todos.filter(t=>!t.done).length} tasks left</span>
+          <div style={{ display:"flex",gap:4,alignItems:"center" }}>
+            <button onClick={()=>setShowDone(v=>!v)} style={{ background:"transparent",border:"none",color:showDone?t.subDim:"#a78bfa",fontSize:11,padding:"3px 6px",borderRadius:6 }}>{showDone?"完了を隠す":"完了を表示"}</button>
+            {doneCount>0&&<button onClick={async()=>{await haptics.medium();setTodos(p=>p.filter(t=>!t.done));}} style={{ background:"transparent",border:"none",color:t.subDim,fontSize:11,padding:"3px 6px",borderRadius:6 }} onMouseEnter={e=>e.target.style.color="#f87171"} onMouseLeave={e=>e.target.style.color=t.subDim}>完了済みを削除</button>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
