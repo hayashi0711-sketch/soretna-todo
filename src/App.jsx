@@ -474,24 +474,17 @@ function TodoDetailModal({ todo, tags, onClose, onSave, theme }) {
 function LocationModal({ lat, lng, onClose, theme }) {
   const t = theme;
   const links = [
-    { label: "トクバイ（近くの特売）",       emoji: "💰", url: `https://tokubai.co.jp/?lat=${lat}&lng=${lng}` },
-    { label: "Googleマップ スーパー検索",    emoji: "🗺️", url: `https://www.google.com/maps/search/%E3%82%B9%E3%83%BC%E3%83%91%E3%83%BC/@${lat},${lng},14z` },
+    { label: "トクバイ（近くの特売）",    emoji: "💰", url: `https://tokubai.co.jp/?lat=${lat}&lng=${lng}` },
+    { label: "Googleマップ スーパー検索", emoji: "🗺️", url: `https://www.google.com/maps/search/%E3%82%B9%E3%83%BC%E3%83%91%E3%83%BC/@${lat},${lng},14z` },
   ];
   return (
     <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
       <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:340,boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}` }} onClick={e=>e.stopPropagation()}>
-        <div style={{ padding:"18px 20px 14px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
-          <span style={{ fontSize:15,fontWeight:700,color:t.text }}>🏷️ 周辺お得情報</span>
-          <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
-        </div>
-        <div style={{ padding:"12px 16px" }}>
-          <div style={{ fontSize:12,color:t.sub,marginBottom:12,textAlign:"center" }}>
-            現在地: {lat.toFixed(4)}, {lng.toFixed(4)}
-          </div>
+        <div style={{ padding:"16px 16px 8px" }}>
           {links.map((link, i) => (
             <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer"
-              style={{ display:"flex",alignItems:"center",gap:12,background:t.inputBg,borderRadius:12,padding:"14px 16px",marginBottom: i < links.length-1 ? 8 : 0,textDecoration:"none",border:`1px solid ${t.border}` }}>
-              <span style={{ fontSize:22 }}>{link.emoji}</span>
+              style={{ display:"flex",alignItems:"center",gap:12,background:t.inputBg,borderRadius:12,padding:"16px 18px",marginBottom: i < links.length-1 ? 8 : 0,textDecoration:"none",border:`1px solid ${t.border}` }}>
+              <span style={{ fontSize:24 }}>{link.emoji}</span>
               <span style={{ fontSize:14,color:t.text,fontWeight:600 }}>{link.label}</span>
               <span style={{ marginLeft:"auto",fontSize:12,color:t.sub }}>→</span>
             </a>
@@ -528,22 +521,22 @@ function Assistant({ todos, onDismiss, notification }) {
 }
 
 // ─── Theme Switcher Bar ───────────────────────────────────────────────────────
-function ThemeSwitcher({ currentThemeId, onChange }) {
+function ThemeSwitcher({ currentThemeId, onChange, size=26 }) {
   return (
-    <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+    <div style={{ display:"flex", gap:5, alignItems:"center", flexWrap:"wrap" }}>
       {THEMES.map(th => (
         <button
           key={th.id}
           onClick={() => onChange(th.id)}
           title={th.label}
           style={{
-            width: 28, height: 28, borderRadius: "50%",
+            width: size, height: size, borderRadius: "50%",
             background: th.bg,
-            border: currentThemeId === th.id ? "2.5px solid #7c6af7" : "2.5px solid rgba(255,255,255,0.15)",
+            border: currentThemeId === th.id ? "2.5px solid #7c6af7" : "2px solid rgba(255,255,255,0.2)",
             cursor: "pointer",
-            fontSize: 13,
+            fontSize: Math.round(size * 0.5),
             display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: currentThemeId === th.id ? "0 0 0 3px rgba(124,106,247,0.3)" : "none",
+            boxShadow: currentThemeId === th.id ? "0 0 0 2px rgba(124,106,247,0.35)" : "none",
             transition: "all 0.15s",
             flexShrink: 0,
           }}
@@ -556,7 +549,7 @@ function ThemeSwitcher({ currentThemeId, onChange }) {
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
-function Sidebar({ todos, currentView, onViewChange, themeId, onThemeChange, theme, isOpen, onClose, splitView }) {
+function Sidebar({ todos, currentView, onViewChange, theme }) {
   const t = theme;
   const isLight = t.isLight;
 
@@ -574,73 +567,53 @@ function Sidebar({ todos, currentView, onViewChange, themeId, onThemeChange, the
     { id: "week",     label: "今週",           emoji: "📆", count: counts.week },
   ];
 
-  const NavBtn = ({ item }) => (
-    <button
-      onClick={() => { onViewChange(item.id); onClose(); }}
-      style={{
-        width:"100%", display:"flex", alignItems:"center", gap:10,
-        padding:"9px 12px", borderRadius:10, border:"none", cursor:"pointer",
-        fontFamily:"inherit", fontSize:13, fontWeight: currentView===item.id ? 700 : 400,
-        background: currentView===item.id
-          ? isLight ? "rgba(124,106,247,0.12)" : "rgba(124,106,247,0.15)"
-          : "transparent",
-        color: currentView===item.id ? "#a78bfa" : t.sub,
-        marginBottom:2, textAlign:"left", transition:"background 0.15s",
-      }}
-    >
-      <span style={{ fontSize:16 }}>{item.emoji}</span>
-      <span style={{ flex:1 }}>{item.label}</span>
-      {item.count > 0 && (
-        <span style={{
-          background: currentView===item.id ? "rgba(124,106,247,0.3)" : isLight?"rgba(0,0,0,0.1)":"rgba(255,255,255,0.08)",
-          color: currentView===item.id ? "#a78bfa" : t.subDim,
-          borderRadius:10, padding:"1px 7px", fontSize:11, fontWeight:700, minWidth:20, textAlign:"center",
-        }}>{item.count}</span>
-      )}
-    </button>
-  );
-
   return (
-    <>
-      {/* Overlay for mobile */}
-      {isOpen && (
-        <div
-          onClick={onClose}
-          style={{ position:"fixed",inset:0,zIndex:90,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(2px)",display:"none" }}
-          className="sidebar-overlay"
-        />
-      )}
-      <div style={{
-        width: splitView ? "66.67vw" : 240, flexShrink: 0,
-        background: t.sidebarBg,
-        borderRight: `1px solid ${t.sidebarBorder}`,
-        display: "flex", flexDirection: "column",
-        height: "100vh", position: "sticky", top: 0,
-        overflowY: "auto",
-        transition: "width 0.3s cubic-bezier(.4,0,.2,1)",
-      }} className="sidebar-panel">
-        {/* App name */}
-        <div style={{ padding:"24px 20px 16px", borderBottom:`1px solid ${t.sidebarBorder}` }}>
-          <div style={{ fontFamily:"'Space Mono',monospace", fontSize:8, color:t.sub, letterSpacing:3, marginBottom:4 }}>MY TASKS</div>
-          <h1 style={{ fontSize:20, fontWeight:700, color:t.text, letterSpacing:-0.5, lineHeight:1 }}>
-            それな！<span style={{ color:"#7c6af7" }}>Todo</span>
-          </h1>
-        </div>
-
-        {/* Navigation */}
-        <nav style={{ padding:"12px 10px", flex:1 }}>
-          {navItems.map(item => <NavBtn key={item.id} item={item}/>)}
-        </nav>
-
-        {/* Theme switcher */}
-        <div style={{ padding:"16px 16px 20px", borderTop:`1px solid ${t.sidebarBorder}` }}>
-          <div style={{ fontSize:11, color:t.sub, fontWeight:600, letterSpacing:1, marginBottom:8, display:"flex", alignItems:"center", gap:6 }}>
-            <PaletteIcon/> テーマ
-          </div>
-          <ThemeSwitcher currentThemeId={themeId} onChange={onThemeChange}/>
-        </div>
+    <div style={{
+      width: 220, flexShrink: 0,
+      background: t.sidebarBg,
+      borderRight: `1px solid ${t.sidebarBorder}`,
+      display: "flex", flexDirection: "column",
+      height: "100vh", position: "sticky", top: 0,
+      overflowY: "auto",
+    }}>
+      {/* App name */}
+      <div style={{ padding:"24px 20px 16px", borderBottom:`1px solid ${t.sidebarBorder}` }}>
+        <div style={{ fontFamily:"'Space Mono',monospace", fontSize:8, color:t.sub, letterSpacing:3, marginBottom:4 }}>MY TASKS</div>
+        <h1 style={{ fontSize:20, fontWeight:700, color:t.text, letterSpacing:-0.5, lineHeight:1 }}>
+          それな！<span style={{ color:"#7c6af7" }}>Todo</span>
+        </h1>
       </div>
-    </>
+
+      {/* Navigation */}
+      <nav style={{ padding:"12px 10px", flex:1 }}>
+        {navItems.map(item => (
+          <button
+            key={item.id}
+            onClick={() => onViewChange(item.id)}
+            style={{
+              width:"100%", display:"flex", alignItems:"center", gap:10,
+              padding:"9px 12px", borderRadius:10, border:"none", cursor:"pointer",
+              fontFamily:"inherit", fontSize:13, fontWeight: currentView===item.id ? 700 : 400,
+              background: currentView===item.id
+                ? isLight ? "rgba(124,106,247,0.12)" : "rgba(124,106,247,0.15)"
+                : "transparent",
+              color: currentView===item.id ? "#a78bfa" : t.sub,
+              marginBottom:2, textAlign:"left", transition:"background 0.15s",
+            }}
+          >
+            <span style={{ fontSize:16 }}>{item.emoji}</span>
+            <span style={{ flex:1 }}>{item.label}</span>
+            {item.count > 0 && (
+              <span style={{
+                background: currentView===item.id ? "rgba(124,106,247,0.3)" : isLight?"rgba(0,0,0,0.1)":"rgba(255,255,255,0.08)",
+                color: currentView===item.id ? "#a78bfa" : t.subDim,
+                borderRadius:10, padding:"1px 7px", fontSize:11, fontWeight:700, minWidth:20, textAlign:"center",
+              }}>{item.count}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+    </div>
   );
 }
 
@@ -669,26 +642,16 @@ export default function TodoApp() {
   const [loaded,      setLoaded]      = useState(false);
   // Sidebar view
   const [sideView,    setSideView]    = useState("all");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [splitView,   setSplitView]   = useState(false);
   // Location
   const [userLoc,     setUserLoc]     = useState(null);
   const [locLoading,  setLocLoading]  = useState(false);
   const [showLocModal,setShowLocModal]= useState(false);
-  // Quick-add FAB
-  const [showFab,   setShowFab]   = useState(false);
-  const [fabPos,    setFabPos]    = useState("right"); // "left" | "center" | "right"
-  const fabInputRef = useRef(null);
-  const fabDragRef  = useRef({ startX:0, dragged:false });
 
   const inputRef    = useRef(null);
   const nextId      = useRef(10);
   const stopVoice   = useRef(null);
   const notifMap    = useRef({});
   const notifTimer  = useRef(null);
-  const swipeStartX = useRef({});
-  const [swipingId,   setSwipingId]   = useState(null);
-  const [swipeOffset, setSwipeOffset] = useState(0);
 
   const theme   = THEMES.find(t => t.id === themeId) || THEMES[0];
   const isLight = theme.isLight;
@@ -733,11 +696,10 @@ export default function TodoApp() {
       if (showTagEd) { setShowTagEd(false); return; }
       if (editTodo)  { setEditTodo(null);   return; }
       if (showCal)   { setShowCal(false);   return; }
-      if (sidebarOpen) { setSidebarOpen(false); return; }
       inputRef.current?.blur();
     }).then(fn => { remove = fn; });
     return () => remove();
-  }, [showTagEd, editTodo, showCal, sidebarOpen]);
+  }, [showTagEd, editTodo, showCal]);
 
   // ── Persist on change ─────────────────────────────────────────────────────
   useEffect(() => { if (loaded) storage.set("themeId", themeId); }, [themeId, loaded]);
@@ -863,11 +825,6 @@ export default function TodoApp() {
     setEditTodo(null);
   };
 
-  // FAB auto-focus
-  useEffect(() => {
-    if (showFab) setTimeout(() => fabInputRef.current?.focus(), 60);
-  }, [showFab]);
-
   // ── Derived ───────────────────────────────────────────────────────────────
   const getTag = id => tags.find(tg => tg.id === id);
 
@@ -914,8 +871,6 @@ export default function TodoApp() {
         *{box-sizing:border-box;margin:0;padding:0;}
         ::-webkit-scrollbar{width:3px;} ::-webkit-scrollbar-thumb{background:#333;border-radius:2px;}
         .todo-item{transition:all 0.22s cubic-bezier(.4,0,.2,1);}
-        .todo-item:hover .del-btn{opacity:1!important;}
-        .del-btn{transition:opacity 0.15s;}
         @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.14)}100%{transform:scale(1)}}
         .pop{animation:pop 0.35s cubic-bezier(.4,0,.2,1);}
         @keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
@@ -926,17 +881,6 @@ export default function TodoApp() {
         input,textarea,select{font-family:inherit;}
         input:focus,textarea:focus,select:focus{outline:none;}
         .sidebar-panel{display:flex;}
-        .menu-btn{display:flex;}
-        @media (max-width:767px){
-          .sidebar-panel{
-            position:fixed!important;left:0;top:0;bottom:0;z-index:100;
-            width:66.67vw!important;
-            transform:translateX(-100%);
-            transition:transform 0.3s cubic-bezier(.4,0,.2,1)!important;
-          }
-          .sidebar-panel.open{transform:translateX(0)!important;}
-          .sidebar-overlay{display:block!important;}
-        }
       `}</style>
 
       {showTagEd && <TagEditorModal tags={tags} onClose={() => setShowTagEd(false)} onSave={tgs => { setTags(tgs); setShowTagEd(false); }} theme={t}/>}
@@ -944,53 +888,36 @@ export default function TodoApp() {
       {showLocModal && userLoc && <LocationModal lat={userLoc.lat} lng={userLoc.lng} onClose={() => setShowLocModal(false)} theme={t}/>}
       <Assistant todos={todos} onDismiss={() => setNotification(null)} notification={notification}/>
 
-      {/* Sidebar */}
-      <div className={`sidebar-panel${sidebarOpen ? " open" : ""}`}>
-        <Sidebar
-          todos={todos}
-          currentView={sideView}
-          onViewChange={setSideView}
-          themeId={themeId}
-          onThemeChange={setThemeId}
-          theme={t}
-          isOpen={sidebarOpen}
-          onClose={() => { setSidebarOpen(false); setSplitView(false); }}
-          splitView={splitView}
-        />
+      {/* Sidebar — always visible */}
+      <div className="sidebar-panel">
+        <Sidebar todos={todos} currentView={sideView} onViewChange={setSideView} theme={t}/>
       </div>
-      {/* Overlay */}
-      {sidebarOpen && (
-        <div onClick={() => { setSidebarOpen(false); setSplitView(false); }} style={{ position:"fixed",inset:0,zIndex:90,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(2px)" }} className="sidebar-overlay"/>
-      )}
 
       {/* Main content */}
       <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", minHeight:"100svh", paddingBottom: kbHeight }}>
 
         {/* Header */}
-        <div style={{ padding:"16px 20px 12px", background:t.headerCard, borderBottom:`1px solid ${t.border}`, display:"flex", alignItems:"center", gap:12, position:"sticky", top:0, zIndex:50 }}>
-          {/* Menu / split-view toggle (all screens) */}
-          <button
-            onClick={() => { setSidebarOpen(v=>!v); setSplitView(v=>!v); }}
-            title={sidebarOpen ? "サイドバーを閉じる" : "サイドバーを開く"}
-            style={{ background: sidebarOpen ? "rgba(124,106,247,0.18)" : t.chipOff, border: sidebarOpen ? "1px solid rgba(124,106,247,0.4)" : "1px solid transparent", borderRadius:8, color: sidebarOpen ? "#a78bfa" : t.sub, padding:"8px 10px", display:"none", alignItems:"center", justifyContent:"center", flexShrink:0 }}
-            className="menu-btn">
-            <SplitIcon/>
-          </button>
-          <div style={{ flex:1 }}>
-            <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:t.sub, letterSpacing:2, marginBottom:1 }}>CURRENT VIEW</div>
-            <div style={{ fontSize:16, fontWeight:700, color:t.text }}>{viewLabel}</div>
+        <div style={{ padding:"10px 16px 8px", background:t.headerCard, borderBottom:`1px solid ${t.border}`, position:"sticky", top:0, zIndex:50 }}>
+          {/* Row 1: view label + progress + location btn */}
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:t.sub, letterSpacing:2, marginBottom:1 }}>CURRENT VIEW</div>
+              <div style={{ fontSize:15, fontWeight:700, color:t.text }}>{viewLabel}</div>
+            </div>
+            <div style={{ display:"flex", alignItems:"baseline", gap:4, flexShrink:0 }}>
+              <span style={{ fontFamily:"'Space Mono',monospace", fontSize:17, fontWeight:700, color:"#7c6af7" }}>{progress}<span style={{ fontSize:9,color:t.subDim }}>%</span></span>
+              <span style={{ fontSize:11,color:t.sub }}>{doneCount}/{totalCount}</span>
+            </div>
+            <button onClick={handleLocationClick}
+              title="周辺お買い得情報"
+              style={{ background: locLoading ? "rgba(124,106,247,0.2)" : "linear-gradient(135deg,#f97316,#fb923c)", border:"none", borderRadius:10, color:"#fff", padding:"6px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, flexShrink:0, boxShadow:"0 2px 8px rgba(249,115,22,0.4)" }}>
+              {locLoading ? "⌛" : "🏷️"}<span style={{whiteSpace:"nowrap"}}>周辺お買い得情報</span>
+            </button>
           </div>
-          {/* Progress */}
-          <div style={{ display:"flex", alignItems:"baseline", gap:4, flexShrink:0 }}>
-            <span style={{ fontFamily:"'Space Mono',monospace", fontSize:18, fontWeight:700, color:"#7c6af7" }}>{progress}<span style={{ fontSize:9,color:t.subDim }}>%</span></span>
-            <span style={{ fontSize:11,color:t.sub }}>{doneCount}/{totalCount}</span>
+          {/* Row 2: theme switcher (right-aligned) */}
+          <div style={{ display:"flex", justifyContent:"flex-end" }}>
+            <ThemeSwitcher currentThemeId={themeId} onChange={setThemeId} size={22}/>
           </div>
-          {/* Location button */}
-          <button onClick={handleLocationClick}
-            title="周辺お得情報"
-            style={{ background: locLoading ? "rgba(124,106,247,0.2)" : "linear-gradient(135deg,#f97316,#fb923c)", border:"none", borderRadius:10, color:"#fff", padding:"7px 12px", fontSize:12, fontWeight:700, display:"flex", alignItems:"center", gap:5, flexShrink:0, boxShadow:"0 2px 8px rgba(249,115,22,0.4)" }}>
-            {locLoading ? "⌛" : "🏷️"}<span style={{fontSize:11, whiteSpace:"nowrap"}}>周辺お得情報</span>
-          </button>
         </div>
 
         {/* Progress bar */}
@@ -1088,48 +1015,16 @@ export default function TodoApp() {
             const todayDue  = !todo.done && isToday(todo.deadline) && !overdue;
             const repeatLabel = getRepeatLabel(todo.repeat);
             const showGrocery = userLoc && isGrocery(todo.text);
-            const isSwiping = swipingId === todo.id;
-            const swipeX    = isSwiping ? swipeOffset : 0;
             return (
-              <div key={todo.id} className={`todo-item slide-in${animId===todo.id?" pop":""}`}
-                onTouchStart={e => {
-                  swipeStartX.current[todo.id] = e.touches[0].clientX;
-                  setSwipingId(todo.id);
-                  setSwipeOffset(0);
-                }}
-                onTouchMove={e => {
-                  if (swipingId !== todo.id) return;
-                  const dx = e.touches[0].clientX - (swipeStartX.current[todo.id] || 0);
-                  if (dx > 0) setSwipeOffset(Math.min(dx, 120));
-                }}
-                onTouchEnd={e => {
-                  const startX = swipeStartX.current[todo.id];
-                  if (startX !== undefined) {
-                    const dx = e.changedTouches[0].clientX - startX;
-                    if (dx > 60) toggleTodo(todo.id);
-                    delete swipeStartX.current[todo.id];
-                  }
-                  setSwipingId(null);
-                  setSwipeOffset(0);
-                }}
-                style={{
-                position:"relative",overflow:"hidden",
+              <div key={todo.id} className={`todo-item slide-in${animId===todo.id?" pop":""}`} style={{
                 display:"flex",alignItems:"flex-start",gap:10,
                 padding:"11px 12px",borderRadius:14,marginBottom:6,
                 background:overdue?"rgba(248,113,113,0.06)":todo.done?isLight?"rgba(0,0,0,0.02)":"rgba(255,255,255,0.02)":isLight?"rgba(0,0,0,0.03)":"rgba(255,255,255,0.04)",
                 border:`1px solid ${overdue?"rgba(248,113,113,0.2)":todayDue?"rgba(251,191,36,0.2)":t.border}`,
                 opacity:todo.done?0.5:1,
-                transform: `translateX(${swipeX}px)`,
-                transition: isSwiping ? "none" : "transform 0.2s ease, all 0.22s cubic-bezier(.4,0,.2,1)",
               }}>
-                {/* Swipe hint background */}
-                {isSwiping && swipeOffset > 20 && (
-                  <div style={{ position:"absolute",left:-swipeOffset,top:0,bottom:0,width:"100%",background:swipeOffset>60?"rgba(52,211,153,0.25)":"rgba(52,211,153,0.12)",display:"flex",alignItems:"center",paddingLeft:16,borderRadius:14,pointerEvents:"none" }}>
-                    <span style={{ fontSize:18,opacity: Math.min(1, (swipeOffset-20)/40) }}>✓</span>
-                  </div>
-                )}
                 <button onClick={()=>toggleTodo(todo.id)}
-                  style={{ width:27,height:27,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:todo.done?"linear-gradient(135deg,#7c6af7,#a78bfa)":t.chipOff,color:todo.done?"#fff":t.sub,border:"none",marginTop:1 }}>
+                  style={{ width:28,height:28,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:todo.done?"linear-gradient(135deg,#7c6af7,#a78bfa)":t.chipOff,color:todo.done?"#fff":t.sub,border:"none",marginTop:1 }}>
                   <CheckIcon done={todo.done}/>
                 </button>
                 <div style={{ flex:1,minWidth:0 }}>
@@ -1150,9 +1045,9 @@ export default function TodoApp() {
                     )}
                   </div>
                 </div>
-                <div style={{ display:"flex",gap:4,flexShrink:0,marginTop:1 }}>
-                  <button onClick={()=>setEditTodo(todo)} style={{ background:t.chipOff,border:"none",color:t.sub,padding:"5px 6px",borderRadius:7,display:"flex" }}><EditIcon size={12}/></button>
-                  <button className="del-btn" onClick={()=>deleteTodo(todo.id)} style={{ background:"rgba(248,113,113,0.08)",border:"none",color:"#f87171",opacity:0,padding:"5px 6px",borderRadius:7,display:"flex" }}><TrashIcon size={12}/></button>
+                <div style={{ display:"flex",gap:5,flexShrink:0,marginTop:1 }}>
+                  <button onClick={()=>setEditTodo(todo)} style={{ background:t.chipOff,border:"none",color:t.sub,padding:"7px 8px",borderRadius:8,display:"flex",alignItems:"center" }}><EditIcon size={16}/></button>
+                  <button onClick={()=>deleteTodo(todo.id)} style={{ background:"rgba(248,113,113,0.12)",border:"none",color:"#f87171",padding:"7px 8px",borderRadius:8,display:"flex",alignItems:"center" }}><TrashIcon size={16}/></button>
                 </div>
               </div>
             );
@@ -1169,88 +1064,6 @@ export default function TodoApp() {
         </div>
       </div>
 
-      {/* ── Floating Action Button ── */}
-      <button
-        onTouchStart={e => {
-          fabDragRef.current = { startX: e.touches[0].clientX, dragged: false };
-        }}
-        onTouchMove={e => {
-          if (Math.abs(e.touches[0].clientX - fabDragRef.current.startX) > 20)
-            fabDragRef.current.dragged = true;
-        }}
-        onTouchEnd={e => {
-          e.preventDefault();
-          if (fabDragRef.current.dragged) {
-            const x = e.changedTouches[0].clientX, w = window.innerWidth;
-            setFabPos(x < w/3 ? "left" : x < w*2/3 ? "center" : "right");
-          } else {
-            setShowFab(v => !v);
-          }
-        }}
-        onClick={() => setShowFab(v => !v)}
-        style={{
-          position:"fixed", bottom:24, zIndex:140,
-          ...(fabPos === "left"   ? { left:20 }
-            : fabPos === "center" ? { left:"calc(50% - 28px)" }
-            :                       { right:20 }),
-          width:56, height:56, borderRadius:"50%",
-          background: showFab ? "linear-gradient(135deg,#374151,#4b5563)" : "linear-gradient(135deg,#ef4444,#f87171)",
-          color:"#fff", border:"none",
-          fontSize:28, fontWeight:300,
-          display:"flex", alignItems:"center", justifyContent:"center",
-          boxShadow: showFab ? "0 4px 12px rgba(0,0,0,0.3)" : "0 4px 16px rgba(239,68,68,0.5)",
-          transition:"left 0.25s, right 0.25s, background 0.2s, transform 0.2s",
-          transform: showFab ? "rotate(45deg)" : "rotate(0deg)",
-          touchAction:"none",
-          userSelect:"none",
-        }}
-        title="タスクを追加（ドラッグで位置変更）">
-        ＋
-      </button>
-
-      {/* ── Quick-Add Bottom Sheet ── */}
-      {showFab && (
-        <div
-          style={{ position:"fixed",inset:0,zIndex:130,background:"rgba(0,0,0,0.4)",backdropFilter:"blur(3px)" }}
-          onClick={() => setShowFab(false)}>
-          <div
-            style={{
-              position:"absolute", bottom:0, left:0, right:0,
-              background:t.card, borderRadius:"20px 20px 0 0",
-              padding:"20px 16px", paddingBottom: Math.max(kbHeight + 12, 20),
-              boxShadow:"0 -8px 40px rgba(0,0,0,0.3)",
-              border:`1px solid ${t.border}`,
-            }}
-            onClick={e => e.stopPropagation()}>
-            {/* Drag handle */}
-            <div style={{ width:36,height:4,background:t.border,borderRadius:2,margin:"0 auto 16px" }}/>
-            <div style={{ fontSize:13,fontWeight:700,color:t.sub,marginBottom:12,letterSpacing:0.5 }}>新しいタスクを追加</div>
-            <div style={{ display:"flex", gap:8, marginBottom:12 }}>
-              <input
-                ref={fabInputRef}
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key==="Enter" && input.trim()) { addTodo(); setShowFab(false); } }}
-                placeholder="タスクを入力…"
-                style={{ flex:1, background:t.inputBg, border:`1px solid ${t.inputBorder}`, borderRadius:12, padding:"12px 14px", color:t.text, fontSize:15, fontFamily:"inherit" }}
-              />
-              <button
-                onClick={() => { if (input.trim()) { addTodo(); setShowFab(false); } }}
-                style={{ background:"linear-gradient(135deg,#ef4444,#f87171)", color:"#fff", border:"none", borderRadius:12, padding:"0 18px", fontSize:15, fontWeight:700, whiteSpace:"nowrap" }}>
-                追加
-              </button>
-            </div>
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {tags.map(tg => (
-                <button key={tg.id} onClick={() => setSelectedTag(tg.id)}
-                  style={{ background:selectedTag===tg.id?tg.color:t.chipOff, color:selectedTag===tg.id?"#111":t.chipOffText, border:"none", borderRadius:8, padding:"6px 14px", fontSize:12, fontWeight:600, fontFamily:"inherit" }}>
-                  {tg.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );
