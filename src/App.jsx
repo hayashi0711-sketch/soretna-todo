@@ -25,6 +25,9 @@ const GROCERY_KEYWORDS = ['牛乳','卵','たまご','野菜','肉','魚','パ�
 
 const WEEKDAY_LABELS = ["日","月","火","水","木","金","土"];
 
+const PRICE_OPTIONS = ["","10","20","30","50","80","100","150","200","250","300","400","500","700","1000","1500","2000","3000","5000","10000"];
+const fmtPrice = p => !p ? "" : (p.includes("円") ? p : p + "円");
+
 // 繰り返しラベル
 const REPEAT_LABELS = {
   daily:           "毎日",
@@ -416,8 +419,8 @@ function TagEditorModal({ tags, onClose, onSave, theme }) {
               {editingId===tag.id ? (
                 <div style={{ background:t.inputBg,borderRadius:12,padding:12 }}>
                   <input autoFocus value={editLabel} onChange={e=>setEditLabel(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveEdit()} style={{ width:"100%",background:t.chipOff,border:`1px solid ${t.inputBorder}`,borderRadius:8,padding:"7px 10px",color:t.text,fontSize:13,fontFamily:"inherit",marginBottom:10,outline:"none" }}/>
-                  <div style={{ display:"flex",gap:5,flexWrap:"wrap",marginBottom:10 }}>
-                    {PRESET_COLORS.map(c=><div key={c} onClick={()=>setEditColor(c)} style={{ width:22,height:22,borderRadius:6,background:c,cursor:"pointer",border:editColor===c?"2px solid #fff":"2px solid transparent" }}/>)}
+                  <div style={{ display:"flex",gap:8,overflowX:"auto",marginBottom:10,paddingBottom:4 }}>
+                    {PRESET_COLORS.map(c=><div key={c} onClick={()=>setEditColor(c)} style={{ width:36,height:36,borderRadius:10,background:c,cursor:"pointer",border:editColor===c?"3px solid #fff":"3px solid transparent",flexShrink:0 }}/>)}
                   </div>
                   <div style={{ display:"flex",gap:6 }}>
                     <button onClick={saveEdit} style={{ flex:1,background:"linear-gradient(135deg,#7c6af7,#a78bfa)",border:"none",borderRadius:8,color:"#fff",fontSize:12,fontWeight:700,padding:"8px 0",cursor:"pointer",fontFamily:"inherit" }}>保存</button>
@@ -440,8 +443,8 @@ function TagEditorModal({ tags, onClose, onSave, theme }) {
             <input value={newLabel} onChange={e=>setNewLabel(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTag()} placeholder="新しいタグ名…" style={{ flex:1,background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:9,padding:"8px 12px",color:t.text,fontSize:13,fontFamily:"inherit",outline:"none" }}/>
             <button onClick={addTag} style={{ background:"linear-gradient(135deg,#7c6af7,#a78bfa)",border:"none",borderRadius:9,color:"#fff",padding:"8px 14px",cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"inherit" }}>＋</button>
           </div>
-          <div style={{ display:"flex",gap:5,flexWrap:"wrap" }}>
-            {PRESET_COLORS.map(c=><div key={c} onClick={()=>setNewColor(c)} style={{ width:22,height:22,borderRadius:7,background:c,cursor:"pointer",border:newColor===c?"2px solid #fff":"2px solid transparent" }}/>)}
+          <div style={{ display:"flex",gap:8,overflowX:"auto",paddingBottom:4 }}>
+            {PRESET_COLORS.map(c=><div key={c} onClick={()=>setNewColor(c)} style={{ width:36,height:36,borderRadius:10,background:c,cursor:"pointer",border:newColor===c?"3px solid #fff":"3px solid transparent",flexShrink:0 }}/>)}
           </div>
         </div>
         <div style={{ padding:"12px 16px 16px",display:"flex",gap:8 }}>
@@ -454,17 +457,22 @@ function TagEditorModal({ tags, onClose, onSave, theme }) {
 }
 
 // ─── Todo Detail Modal ─────────────────────────────────────────────────────────
-function TodoDetailModal({ todo, tags, onClose, onSave, theme }) {
-  const [text,        setText]        = useState(todo.text);
-  const [tagId,       setTagId]       = useState(todo.tagId);
-  const [priority,    setPriority]    = useState(todo.priority||"none");
-  const [deadline,    setDeadline]    = useState(todo.deadline||null);
-  const [showCal,     setShowCal]     = useState(false);
-  const [repeat,      setRepeat]      = useState(todo.repeat || null);
-  const [price,       setPrice]       = useState(todo.price || "");
-  const [memo,        setMemo]        = useState(todo.memo || "");
-  const [storePrices, setStorePrices] = useState(todo.storePrices || []);
+function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
+  const [text,          setText]          = useState(todo.text);
+  const [tagId,         setTagId]         = useState(todo.tagId);
+  const [priority,      setPriority]      = useState(todo.priority||"none");
+  const [deadline,      setDeadline]      = useState(todo.deadline||null);
+  const [showCal,       setShowCal]       = useState(false);
+  const [repeat,        setRepeat]        = useState(todo.repeat || null);
+  const [price,         setPrice]         = useState(todo.price ? todo.price.replace(/[^0-9]/g,'') : "");
+  const [memo,          setMemo]          = useState(todo.memo || "");
+  const [storePrices,   setStorePrices]   = useState(todo.storePrices || []);
+  const [memoListening, setMemoListening] = useState(false);
+  const [memoInterim,   setMemoInterim]   = useState("");
+  const stopMemoVoice = useRef(null);
   const t = theme;
+
+  const allStores = [...new Set((todos||[]).flatMap(td => (td.storePrices||[]).map(sp => sp.store).filter(Boolean)))];
 
   const inputSt = {
     background: t.inputBg, border: `1px solid ${t.inputBorder}`,
@@ -472,14 +480,48 @@ function TodoDetailModal({ todo, tags, onClose, onSave, theme }) {
     fontFamily: "inherit", outline: "none",
   };
 
+  const handleSave = () => {
+    onSave({ ...todo, text: text.trim()||todo.text, tagId, priority, deadline, repeat, price: price||null, memo: memo||null, storePrices });
+  };
+
+  const toggleMemoVoice = async () => {
+    if (memoListening) {
+      stopMemoVoice.current?.();
+      setMemoListening(false);
+      setMemoInterim("");
+      return;
+    }
+    await haptics.light();
+    setMemoListening(true);
+    stopMemoVoice.current = startListening({
+      onResult:  txt => { setMemo(prev => prev + txt); setMemoInterim(""); },
+      onInterim: txt => setMemoInterim(txt),
+      onEnd:     () => { setMemoListening(false); setMemoInterim(""); },
+      onError:   () => { setMemoListening(false); setMemoInterim(""); },
+    });
+  };
+
+  const saveBtnSt = { flex:1, background:"linear-gradient(135deg,#7c6af7,#a78bfa)", border:"none", borderRadius:12, color:"#fff", fontSize:14, fontWeight:700, padding:"12px 0", cursor:"pointer", fontFamily:"inherit" };
+  const cancelBtnSt = { background:t.chipOff, border:"none", borderRadius:12, color:t.sub, fontSize:14, padding:"12px 16px", cursor:"pointer", fontFamily:"inherit" };
+
   return (
     <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
-      <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:380,boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}`,maxHeight:"90vh",overflowY:"auto" }} onClick={e=>e.stopPropagation()}>
-        <div style={{ padding:"18px 20px 14px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+      <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:380,boxShadow:"0 24px 64px rgba(0,0,0,0.7)",border:`1px solid ${t.border}`,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden" }} onClick={e=>e.stopPropagation()}>
+
+        {/* Sticky header */}
+        <div style={{ padding:"16px 20px 12px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0 }}>
           <span style={{ fontSize:15,fontWeight:700,color:t.text }}>タスクを編集</span>
           <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
         </div>
-        <div style={{ padding:"16px 20px" }}>
+
+        {/* Top save row */}
+        <div style={{ padding:"8px 20px",borderBottom:`1px solid ${t.border}`,display:"flex",gap:8,flexShrink:0 }}>
+          <button onClick={handleSave} style={saveBtnSt}>保存</button>
+          <button onClick={onClose} style={cancelBtnSt}>キャンセル</button>
+        </div>
+
+        {/* Scrollable content */}
+        <div style={{ flex:1,overflowY:"auto",padding:"14px 20px" }}>
           <textarea value={text} onChange={e=>setText(e.target.value)} rows={3} style={{ width:"100%",background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:12,padding:"10px 14px",color:t.text,fontSize:14,fontFamily:"inherit",outline:"none",resize:"none",lineHeight:1.6 }}/>
 
           {/* タグ */}
@@ -519,31 +561,45 @@ function TodoDetailModal({ todo, tags, onClose, onSave, theme }) {
           </div>
 
           {/* 価格・メモセクション */}
-          <div style={{ marginTop:14, padding:"12px 14px", background:t.inputBg, borderRadius:12, border:`1px solid ${t.inputBorder}` }}>
+          <div style={{ marginTop:14,padding:"12px 14px",background:t.inputBg,borderRadius:12,border:`1px solid ${t.inputBorder}` }}>
             <div style={{ fontSize:11,color:"#a78bfa",fontWeight:700,letterSpacing:1,marginBottom:12 }}>💰 価格・メモ</div>
 
             {/* 目安価格 */}
             <div style={{ marginBottom:10 }}>
               <div style={{ fontSize:11,color:t.sub,marginBottom:5 }}>目安価格</div>
-              <input value={price} onChange={e=>setPrice(e.target.value)} placeholder="例: 約200円"
-                style={{ ...inputSt, width:"100%" }}/>
+              <div style={{ position:"relative",display:"inline-block" }}>
+                <select value={price} onChange={e=>setPrice(e.target.value)}
+                  style={{ ...inputSt,width:120,appearance:"none",WebkitAppearance:"none",paddingRight:28,cursor:"pointer" }}>
+                  <option value="">なし</option>
+                  {PRICE_OPTIONS.filter(p=>p).map(p=><option key={p} value={p}>{p}円</option>)}
+                </select>
+                <span style={{ position:"absolute",right:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:t.sub,fontSize:10 }}>▼</span>
+              </div>
             </div>
 
             {/* 店舗別底値 */}
             <div style={{ marginBottom:10 }}>
               <div style={{ fontSize:11,color:t.sub,marginBottom:6 }}>🏪 店舗別底値</div>
+              <datalist id={`store-names-${todo.id}`}>
+                {allStores.map(s=><option key={s} value={s}/>)}
+              </datalist>
               {storePrices.map((sp, i) => (
-                <div key={i} style={{ display:"flex", gap:5, marginBottom:5 }}>
-                  <input value={sp.store}
+                <div key={i} style={{ display:"flex",gap:5,marginBottom:5,alignItems:"center" }}>
+                  <input value={sp.store} list={`store-names-${todo.id}`}
                     onChange={e=>setStorePrices(prev=>prev.map((x,j)=>j===i?{...x,store:e.target.value}:x))}
                     placeholder="店舗名"
-                    style={{ ...inputSt, flex:1 }}/>
-                  <input value={sp.price}
-                    onChange={e=>setStorePrices(prev=>prev.map((x,j)=>j===i?{...x,price:e.target.value}:x))}
-                    placeholder="底値"
-                    style={{ ...inputSt, width:80 }}/>
+                    style={{ ...inputSt,flex:1,minWidth:0 }}/>
+                  <div style={{ position:"relative",flexShrink:0 }}>
+                    <select value={sp.price}
+                      onChange={e=>setStorePrices(prev=>prev.map((x,j)=>j===i?{...x,price:e.target.value}:x))}
+                      style={{ ...inputSt,width:95,appearance:"none",WebkitAppearance:"none",paddingRight:24,cursor:"pointer" }}>
+                      <option value="">なし</option>
+                      {PRICE_OPTIONS.filter(p=>p).map(p=><option key={p} value={p}>{p}円</option>)}
+                    </select>
+                    <span style={{ position:"absolute",right:7,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:t.sub,fontSize:10 }}>▼</span>
+                  </div>
                   <button onClick={()=>setStorePrices(prev=>prev.filter((_,j)=>j!==i))}
-                    style={{ background:"rgba(248,113,113,0.15)",border:"none",borderRadius:8,color:"#f87171",padding:"0 10px",cursor:"pointer",fontFamily:"inherit",fontSize:14,flexShrink:0 }}>×</button>
+                    style={{ background:"rgba(248,113,113,0.15)",border:"none",borderRadius:8,color:"#f87171",padding:"0 10px",cursor:"pointer",fontFamily:"inherit",fontSize:14,flexShrink:0,height:36 }}>×</button>
                 </div>
               ))}
               <button onClick={()=>setStorePrices(prev=>[...prev,{store:"",price:""}])}
@@ -553,17 +609,24 @@ function TodoDetailModal({ todo, tags, onClose, onSave, theme }) {
             {/* メモ */}
             <div>
               <div style={{ fontSize:11,color:t.sub,marginBottom:5 }}>📝 メモ</div>
-              <textarea value={memo} onChange={e=>setMemo(e.target.value)} rows={2}
-                placeholder="買う際のメモ、ブランド指定など…"
-                style={{ ...inputSt, width:"100%", resize:"none", lineHeight:1.6 }}/>
+              <div style={{ position:"relative" }}>
+                <textarea value={memoListening && memoInterim ? memo + memoInterim : memo}
+                  onChange={e=>{ if (!memoListening) setMemo(e.target.value); }} rows={2}
+                  placeholder="買う際のメモ、ブランド指定など…"
+                  style={{ ...inputSt,width:"100%",resize:"none",lineHeight:1.6,paddingRight:42 }}/>
+                <button onClick={toggleMemoVoice} className={memoListening?"pulse":""}
+                  style={{ position:"absolute",right:8,bottom:8,background:memoListening?"rgba(248,113,113,0.2)":t.chipOff,border:"none",borderRadius:7,color:memoListening?"#f87171":t.sub,padding:"5px 6px",display:"flex",alignItems:"center",cursor:"pointer" }}>
+                  <MicIcon active={memoListening}/>
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        <div style={{ padding:"0 20px 20px",display:"flex",gap:8 }}>
-          <button onClick={()=>onSave({...todo,text:text.trim()||todo.text,tagId,priority,deadline,repeat,price:price||null,memo:memo||null,storePrices})}
-            style={{ flex:1,background:"linear-gradient(135deg,#7c6af7,#a78bfa)",border:"none",borderRadius:12,color:"#fff",fontSize:14,fontWeight:700,padding:"12px 0",cursor:"pointer",fontFamily:"inherit" }}>保存</button>
-          <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:12,color:t.sub,fontSize:14,padding:"12px 16px",cursor:"pointer",fontFamily:"inherit" }}>キャンセル</button>
+        {/* Bottom save row */}
+        <div style={{ padding:"12px 20px",borderTop:`1px solid ${t.border}`,display:"flex",gap:8,flexShrink:0 }}>
+          <button onClick={handleSave} style={saveBtnSt}>保存</button>
+          <button onClick={onClose} style={cancelBtnSt}>キャンセル</button>
         </div>
       </div>
     </div>
@@ -661,7 +724,7 @@ function ViewTabs({ todos, currentView, onViewChange, theme }) {
   };
 
   const navItems = [
-    { id: "all",      label: "すべてのタスク", emoji: "📋", count: counts.all },
+    { id: "all",      label: "すべて", emoji: "📋", count: counts.all },
     { id: "today",    label: "今日",           emoji: "📅", count: counts.today },
     { id: "tomorrow", label: "明日",           emoji: "🌅", count: counts.tomorrow },
     { id: "week",     label: "今週",           emoji: "📆", count: counts.week },
@@ -761,6 +824,7 @@ export default function TodoApp() {
   const stopVoice   = useRef(null);
   const notifMap    = useRef({});
   const notifTimer  = useRef(null);
+  const wasListening = useRef(false);
 
   const theme   = THEMES.find(t => t.id === themeId) || THEMES[0];
   const isLight = theme.isLight;
@@ -870,6 +934,18 @@ export default function TodoApp() {
           alert("このブラウザは音声入力に対応していません（ChromeかSafariをお使いください）");
       },
     });
+  }, [listening]);
+
+  // ── Keyboard control during voice input ──────────────────────────────────
+  useEffect(() => {
+    if (listening) {
+      wasListening.current = true;
+      inputRef.current?.blur();
+    } else if (wasListening.current) {
+      wasListening.current = false;
+      const timer = setTimeout(() => inputRef.current?.focus(), 150);
+      return () => clearTimeout(timer);
+    }
   }, [listening]);
 
   // ── Location ──────────────────────────────────────────────────────────────
@@ -995,7 +1071,7 @@ export default function TodoApp() {
       `}</style>
 
       {showTagEd && <TagEditorModal tags={tags} onClose={() => setShowTagEd(false)} onSave={tgs => { setTags(tgs); setShowTagEd(false); }} theme={t}/>}
-      {editTodo  && <TodoDetailModal todo={editTodo} tags={tags} onClose={() => setEditTodo(null)} onSave={saveEdit} theme={t}/>}
+      {editTodo  && <TodoDetailModal todo={editTodo} todos={todos} tags={tags} onClose={() => setEditTodo(null)} onSave={saveEdit} theme={t}/>}
       {showLocModal && userLoc && <LocationModal lat={userLoc.lat} lng={userLoc.lng} onClose={() => setShowLocModal(false)} theme={t}/>}
       <Assistant todos={todos} onDismiss={() => setNotification(null)} notification={notification}/>
 
@@ -1006,11 +1082,15 @@ export default function TodoApp() {
         <div style={{ padding:"10px 16px 8px", background:t.headerCard, borderBottom:`1px solid ${t.border}`, position:"sticky", top:0, zIndex:50 }}>
           {/* Row 1: app title + progress + location btn */}
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontFamily:"'Space Mono',monospace", fontSize:8, color:t.sub, letterSpacing:3, marginBottom:1 }}>MY TASKS</div>
-              <h1 style={{ fontSize:18, fontWeight:700, color:t.text, letterSpacing:-0.5, lineHeight:1.1 }}>
-                それな！<span style={{ color:"#7c6af7" }}>Todo</span>
-              </h1>
+            <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", gap:7 }}>
+              <span style={{ fontSize:24, lineHeight:1 }}>🐱</span>
+              <div>
+                <div style={{ fontFamily:"'Space Mono',monospace", fontSize:8, color:t.sub, letterSpacing:3, marginBottom:1 }}>MY TASKS</div>
+                <div style={{ lineHeight:1.1 }}>
+                  <span style={{ fontSize:20, fontWeight:900, letterSpacing:-0.5, background:"linear-gradient(135deg,#c084fc,#818cf8)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text", display:"inline" }}>それな！</span>
+                  <span style={{ fontFamily:"'Space Mono',monospace", fontSize:16, fontWeight:700, letterSpacing:1, background:"linear-gradient(135deg,#7c6af7,#a78bfa)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text", display:"inline" }}>Todo</span>
+                </div>
+              </div>
             </div>
             <div style={{ display:"flex", alignItems:"baseline", gap:4, flexShrink:0 }}>
               <span style={{ fontFamily:"'Space Mono',monospace", fontSize:17, fontWeight:700, color:"#7c6af7" }}>{progress}<span style={{ fontSize:9,color:t.subDim }}>%</span></span>
@@ -1039,7 +1119,7 @@ export default function TodoApp() {
         {/* Input area */}
         <div style={{ padding:"14px 16px 10px", borderBottom:`1px solid ${t.border}`, background:t.card }}>
           <div style={{ position:"relative", display:"flex", gap:8, background:t.inputBg, borderRadius:14, padding:"4px 6px 4px 14px", border:`1px solid ${t.inputBorder}`, alignItems:"center" }}>
-            <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTodo()}
+            <input ref={inputRef} readOnly={listening} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTodo()}
               placeholder={listening ? (interimText || "聞いています…") : "新しいタスクを入力…"} enterKeyHint="done"
               style={{ flex:1,background:"transparent",border:"none",color:t.text,fontSize:14,padding:"10px 0",minWidth:0 }}/>
             {interimText && (
@@ -1161,13 +1241,13 @@ export default function TodoApp() {
                       </span>
                     )}
                     {todo.price && (
-                      <span style={{ fontSize:10, background:"rgba(251,191,36,0.15)", color:"#fbbf24", borderRadius:5, padding:"1px 7px", fontWeight:600 }}>💰 {todo.price}</span>
+                      <span style={{ fontSize:10, background:"rgba(251,191,36,0.15)", color:"#fbbf24", borderRadius:5, padding:"1px 7px", fontWeight:600 }}>💰 {fmtPrice(todo.price)}</span>
                     )}
                   </div>
                   {todo.storePrices?.length > 0 && (
                     <div style={{ marginTop:4, display:"flex", flexWrap:"wrap", gap:6 }}>
                       {todo.storePrices.map((sp, i) => sp.store && (
-                        <span key={i} style={{ fontSize:10, color:t.sub }}>🏪 {sp.store}{sp.price ? `: ${sp.price}` : ""}</span>
+                        <span key={i} style={{ fontSize:10, color:t.sub }}>🏪 {sp.store}{sp.price ? `: ${fmtPrice(sp.price)}` : ""}</span>
                       ))}
                     </div>
                   )}
