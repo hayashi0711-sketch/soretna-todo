@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ─── グループデータへのアクセス制御 ────────────────────────────────────
+    match /groups/{groupId} {
+      // グループメンバーは読み取り可能
+      allow read: if request.auth.uid in resource.data.members;
+
+      // Admin のみ書き込み可能
+      allow write: if request.auth.uid in resource.data.members
+                   && resource.data.members[request.auth.uid].role == 'admin';
+
+      // グループ内のタスク
+      match /todos/{todoId} {
+        // メンバーは読み取り可能
+        allow read: if request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+
+        // メンバーは作成・更新・削除可能
+        allow create, update, delete: if request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+      }
+    }
+
+    // ─── ユーザーの個人データ ──────────────────────────────────────────────
+    match /users/{userId} {
+      // 自分のデータのみアクセス可能
+      allow read, write: if request.auth.uid == userId;
+
+      // 個人のグループ（非推奨、互換性用）
+      match /groups/{groupId} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+      // 個人のタスク
+      match /todos/{todoId} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+      // 通知
+      match /notifications/{notificationId} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+      // アクティビティログ
+      match /activityLogs/{logId} {
+        allow read, write: if request.auth.uid == userId;
+      }
+    }
+
+    // ─── その他のアクセスは拒否 ────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

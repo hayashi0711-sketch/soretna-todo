@@ -1,6 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { storage, haptics, requestNotificationPermission, scheduleDeadlineNotification, cancelNotification, requestSpeechPermission, startListening, addKeyboardListeners, addBackButtonListener } from "./capacitor-adapters";
 
+// ─── Firebase Hooks ───────────────────────────────────────────────────────────
+import { useAuth } from "./hooks/useAuth";
+import { useGroups } from "./hooks/useGroups";
+import { useGroupTodos } from "./hooks/useGroupTodos";
+import { useGroupMembers } from "./hooks/useGroupMembers";
+import { useNotifications } from "./hooks/useNotifications";
+import { useActivityFeed } from "./hooks/useActivityFeed";
+
+// ─── Firebase Components ──────────────────────────────────────────────────────
+import { GroupSelector } from "./components/Groups/GroupSelector";
+import { GroupModal } from "./components/Groups/GroupModal";
+import { SharedTaskForm } from "./components/SharedTasks/SharedTaskForm";
+import { SharedTaskList } from "./components/SharedTasks/SharedTaskList";
+import { NotificationPanel } from "./components/Notifications/NotificationPanel";
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PRESET_COLORS = ["#f87171","#fb923c","#fbbf24","#a3e635","#34d399","#22d3ee","#60a5fa","#a78bfa","#f472b6","#e2e8f0"];
 const PRIORITY_CONFIG = {
@@ -647,6 +662,23 @@ export default function TodoApp() {
   const [locLoading,  setLocLoading]  = useState(false);
   const [showLocModal,setShowLocModal]= useState(false);
 
+  // ─── Firebase: Authentication & Groups ────────────────────────────────────
+  const { user, userProfile, loading: authLoading, signUp, signIn, signOut } = useAuth();
+  const { groups, loading: groupsLoading, createGroup, updateGroup, deleteGroup } = useGroups(user?.uid);
+  const { addMemberToGroup, removeMemberFromGroup, updateMemberRoleInGroup } = useGroupMembers();
+
+  // ─── Firebase: Group Selection & Shared Tasks ──────────────────────────────
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const { todos: groupTodos, loading: todosLoading, addTodo, updateTodo, deleteTodo, toggleTodo } = useGroupTodos(selectedGroupId);
+
+  // ─── Firebase: Notifications & Activity ────────────────────────────────────
+  const { notifications, unreadCount, loading: notificationsLoading, addNotification, markAsRead, deleteNotification, markAllAsRead } = useNotifications(user?.uid);
+  const { activities, loading: activitiesLoading, addActivity } = useActivityFeed(selectedGroupId);
+
+  // ─── Firebase: UI State ────────────────────────────────────────────────────
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+  const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
+
   const inputRef    = useRef(null);
   const nextId      = useRef(10);
   const stopVoice   = useRef(null);
@@ -825,6 +857,97 @@ export default function TodoApp() {
     setEditTodo(null);
   };
 
+  // ─── Firebase: Group Event Handlers ───────────────────────────────────────
+  const handleCreateGroup = async (formData) => {
+    try {
+      const groupId = await createGroup(formData.name, formData.description);
+      setSelectedGroupId(groupId);
+      setIsGroupModalOpen(false);
+
+      // グループ作成通知
+      await addNotification({
+        userId: user.uid,
+        type: 'group_created',
+        groupId,
+        message: `グループ「${formData.name}」を作成しました`,
+        triggeredBy: user.uid,
+        triggeredByName: userProfile?.displayName,
+        read: false,
+        createdAt: new Date(),
+      });
+    } catch (err) {
+      console.error('Error creating group:', err);
+      alert('グループ作成に失敗しました');
+    }
+  };
+
+  const handleAddGroupTask = async (taskData) => {
+    try {
+      const taskId = await addTodo(
+        selectedGroupId,
+        taskData.text,
+        taskData.priority,
+        taskData.tags
+      );
+
+      // タスク作成通知
+      await addNotification({
+        userId: user.uid,
+        type: 'todo_created',
+        groupId: selectedGroupId,
+        message: `「${taskData.text}」が追加されました`,
+        triggeredBy: user.uid,
+        triggeredByName: userProfile?.displayName,
+        relatedTodoId: taskId,
+        read: false,
+        createdAt: new Date(),
+      });
+
+      // アクティビティ記録
+      await addActivity({
+        userId: user.uid,
+        userName: userProfile?.displayName || 'User',
+        type: 'todo_created',
+        description: `「${taskData.text}」を作成しました`,
+        relatedTodoId: taskId,
+        createdAt: new Date(),
+      });
+    } catch (err) {
+      console.error('Error adding task:', err);
+      alert('タスク作成に失敗しました');
+    }
+  };
+
+  const handleToggleGroupTask = async (taskId) => {
+    try {
+      const todo = groupTodos.find(t => t.id === taskId);
+      if (!todo) return;
+
+      await toggleTodo(selectedGroupId, taskId, user.uid);
+
+      // アクティビティ記録
+      await addActivity({
+        userId: user.uid,
+        userName: userProfile?.displayName || 'User',
+        type: todo.done ? 'todo_completed' : 'todo_updated',
+        description: `「${todo.text}」を${todo.done ? '完了' : '再開'}しました`,
+        relatedTodoId: taskId,
+        createdAt: new Date(),
+      });
+    } catch (err) {
+      console.error('Error toggling task:', err);
+    }
+  };
+
+  const handleDeleteGroupTask = async (taskId) => {
+    try {
+      await deleteTodo(selectedGroupId, taskId);
+    } catch (err) {
+      console.error('Error deleting task:', err);
+      alert('タスク削除に失敗しました');
+    }
+  };
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const getTag = id => tags.find(tg => tg.id === id);
 
@@ -886,6 +1009,14 @@ export default function TodoApp() {
       {showTagEd && <TagEditorModal tags={tags} onClose={() => setShowTagEd(false)} onSave={tgs => { setTags(tgs); setShowTagEd(false); }} theme={t}/>}
       {editTodo  && <TodoDetailModal todo={editTodo} tags={tags} onClose={() => setEditTodo(null)} onSave={saveEdit} theme={t}/>}
       {showLocModal && userLoc && <LocationModal lat={userLoc.lat} lng={userLoc.lng} onClose={() => setShowLocModal(false)} theme={t}/>}
+
+      {/* Firebase: Group Modal */}
+      {user && <GroupModal
+        isOpen={isGroupModalOpen}
+        onClose={() => setIsGroupModalOpen(false)}
+        onSubmit={handleCreateGroup}
+      />}
+
       <Assistant todos={todos} onDismiss={() => setNotification(null)} notification={notification}/>
 
       {/* Sidebar — always visible */}
@@ -924,6 +1055,76 @@ export default function TodoApp() {
         <div style={{ height:3, background:isLight?"rgba(0,0,0,0.06)":"#1e1e28" }}>
           <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#7c6af7,#a78bfa)", transition:"width 0.5s cubic-bezier(.4,0,.2,1)" }}/>
         </div>
+
+        {/* ═════════════════════════════════════════════════════════════════════════ */}
+        {/* Firebase: Group/Shared Tasks Section                                    */}
+        {/* ═════════════════════════════════════════════════════════════════════════ */}
+        {user ? (
+          <>
+            {/* Header with Notifications */}
+            <div style={{ padding:"12px 16px", borderBottom:`1px solid ${t.border}`, background:t.card, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <span style={{ fontWeight:600, color:t.text, fontSize:13 }}>👨‍👩‍👧‍👦 共有タスク</span>
+              <NotificationPanel
+                notifications={notifications}
+                unreadCount={unreadCount}
+                loading={notificationsLoading}
+                onMarkAsRead={markAsRead}
+                onDeleteNotification={deleteNotification}
+                onMarkAllAsRead={markAllAsRead}
+              />
+            </div>
+
+            {/* Group Selector */}
+            <div style={{ padding:"12px 16px", background:t.card, borderBottom:`1px solid ${t.border}` }}>
+              <GroupSelector
+                groups={groups}
+                selectedGroupId={selectedGroupId}
+                onSelectGroup={setSelectedGroupId}
+                onCreateGroup={() => setIsGroupModalOpen(true)}
+                onOpenSettings={(groupId) => {
+                  setSelectedGroupId(groupId);
+                  setIsGroupSettingsOpen(true);
+                }}
+              />
+            </div>
+
+            {/* Group Tasks Section */}
+            {selectedGroupId ? (
+              <>
+                {/* Task Input Form */}
+                <div style={{ padding:"12px 16px", background:t.card, borderBottom:`1px solid ${t.border}` }}>
+                  <SharedTaskForm
+                    selectedGroupId={selectedGroupId}
+                    onAddTask={handleAddGroupTask}
+                    isLoading={todosLoading}
+                  />
+                </div>
+
+                {/* Task List */}
+                <div style={{ padding:"12px 16px", background:t.card, borderBottom:`1px solid ${t.border}`, maxHeight:300, overflowY:"auto" }}>
+                  <SharedTaskList
+                    todos={groupTodos}
+                    loading={todosLoading}
+                    onToggleTodo={handleToggleGroupTask}
+                    onDeleteTodo={handleDeleteGroupTask}
+                    currentUserId={user.uid}
+                  />
+                </div>
+              </>
+            ) : (
+              <div style={{ padding:"20px 16px", background:t.card, borderBottom:`1px solid ${t.border}`, textAlign:"center", color:t.sub, fontSize:13 }}>
+                👈 グループを選択して共有タスクを追加します
+              </div>
+            )}
+
+            {/* Separator */}
+            <div style={{ height:1, background:`linear-gradient(90deg,${t.border},transparent)` }}/>
+          </>
+        ) : (
+          <div style={{ padding:"20px 16px", background:t.card, borderBottom:`1px solid ${t.border}`, textAlign:"center", color:t.sub, fontSize:13 }}>
+            🔐 ログインして共有タスクを使用します
+          </div>
+        )}
 
         {/* Input area */}
         <div style={{ padding:"14px 16px 10px", borderBottom:`1px solid ${t.border}`, background:t.card }}>

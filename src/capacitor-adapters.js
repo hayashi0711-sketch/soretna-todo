@@ -94,16 +94,43 @@ export async function requestSpeechPermission() {
   return true; // Web Speech API requires no explicit permission request
 }
 
-export function startListening({ onResult, onEnd, onError }) {
-  return startWebSpeech({ onResult, onEnd, onError });
+export function startListening({ onResult, onEnd, onError, onInterimResult }) {
+  return startWebSpeech({ onResult, onEnd, onError, onInterimResult });
 }
 
-function startWebSpeech({ onResult, onEnd, onError }) {
+// Feature 7: interim results support
+function startWebSpeech({ onResult, onEnd, onError, onInterimResult }) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { onError?.('unsupported'); onEnd?.(); return () => {}; }
   const r = new SR();
-  r.lang = 'ja-JP'; r.continuous = false; r.interimResults = false;
-  r.onresult = e => onResult(e.results[0][0].transcript);
+  r.lang = 'ja-JP';
+  r.continuous = false;
+  r.interimResults = true; // Enable interim results for real-time feedback
+
+  r.onresult = e => {
+    let interimText = '';
+    let finalText = '';
+
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const transcript = e.results[i][0].transcript;
+      if (e.results[i].isFinal) {
+        finalText += transcript;
+      } else {
+        interimText += transcript;
+      }
+    }
+
+    // Call interim callback for real-time display
+    if (interimText && onInterimResult) {
+      onInterimResult(interimText);
+    }
+
+    // Call final result callback only when recognized as final
+    if (finalText) {
+      onResult(finalText);
+    }
+  };
+
   r.onerror  = e => onError?.(e);
   r.onend    = () => onEnd?.();
   r.start();
