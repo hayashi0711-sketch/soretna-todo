@@ -54,3 +54,4 @@ npm run cap:open:ios
 <key>NSMicrophoneUsageDescription</key>
 <string>音声入力のためにマイクを使用します</string>
 ```
+// Force rebuild
