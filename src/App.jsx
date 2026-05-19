@@ -1483,12 +1483,6 @@ export default function TodoApp() {
               <button key={tg.id} onClick={()=>setSelectedTag(tg.id)}
                 style={{ background:selectedTag===tg.id?tg.color:t.chipOff,color:selectedTag===tg.id?"#111":t.chipOffText,border:"none",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600 }}>{tg.label}</button>
             ))}
-            <div style={{ width:"1px",height:16,background:t.border,margin:"0 2px" }}/>
-            {["high","medium","low"].map(k=>{
-              const v=PRIORITY_CONFIG[k];
-              return <button key={k} onClick={()=>setPriority(priority===k?"none":k)}
-                style={{ background:priority===k?v.bg:t.chipOff,color:priority===k?v.color:t.sub,border:priority===k?`1px solid ${v.color}50`:"1px solid transparent",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700 }}>{v.label}</button>;
-            })}
             <button onClick={()=>setShowTagEd(true)}
               style={{ background:t.chipOff,color:t.sub,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,display:"flex",alignItems:"center",gap:4,marginLeft:"auto" }}>
               <TagIcon size={11}/> タグ管理
@@ -1498,7 +1492,7 @@ export default function TodoApp() {
 
         {/* Filter row */}
         <div style={{ padding:"7px 12px 4px", display:"flex", gap:5, alignItems:"center", background:t.card, overflowX:"auto", scrollbarWidth:"none" }}>
-          {[{id:"all",label:"すべて"}, ...FIXED_TAGS, {id:"stock",label:"在庫"}, ...tags].map(tg=>(
+          {[{id:"all",label:"すべて"}, ...FIXED_TAGS, ...tags].map(tg=>(
             <button key={tg.id} onClick={()=>setFilter(tg.id)}
               style={{ background:filter===tg.id?"rgba(124,106,247,0.18)":"transparent", color:filter===tg.id?"#a78bfa":t.sub, border:filter===tg.id?"1px solid rgba(124,106,247,0.35)":"1px solid transparent", borderRadius:8, padding:"5px 12px", fontSize:13, fontWeight:500, whiteSpace:"nowrap" }}>{tg.label}</button>
           ))}
@@ -1525,6 +1519,7 @@ export default function TodoApp() {
             const showGrocery = userLoc && isGrocery(todo.text);
             const hasPrice = todo.price || (todo.storePrices?.length > 0);
             const catLabel = SHOPPING_CATEGORIES.find(c => c.id === todo.category)?.label;
+            const catCC = todo.category ? CATEGORY_COLORS[todo.category] : null;
             return (
               <div
                 key={todo.id}
@@ -1532,8 +1527,14 @@ export default function TodoApp() {
                 style={{
                   display:"flex",alignItems:"flex-start",gap:10,
                   padding:"11px 12px",borderRadius:14,marginBottom:6,
-                  background:overdue?"rgba(248,113,113,0.06)":todo.done?isLight?"rgba(0,0,0,0.02)":"rgba(255,255,255,0.02)":isLight?"rgba(0,0,0,0.03)":"rgba(255,255,255,0.04)",
-                  border:`1px solid ${overdue?"rgba(248,113,113,0.2)":todayDue?"rgba(251,191,36,0.2)":t.border}`,
+                  background: overdue
+                    ? "rgba(248,113,113,0.06)"
+                    : todo.done
+                      ? isLight?"rgba(0,0,0,0.02)":"rgba(255,255,255,0.02)"
+                      : catCC
+                        ? catCC.bg
+                        : isLight?"rgba(0,0,0,0.03)":"rgba(255,255,255,0.04)",
+                  border:`1px solid ${overdue?"rgba(248,113,113,0.2)":todayDue?"rgba(251,191,36,0.2)":catCC?`${catCC.color}40`:t.border}`,
                   opacity:todo.done?0.5:1,
                   userSelect: "none",
                 }}>
