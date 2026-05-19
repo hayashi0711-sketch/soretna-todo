@@ -55,3 +55,4 @@ npm run cap:open:ios
 <string>音声入力のためにマイクを使用します</string>
 ```
 // Force rebuild
+// Rebuild trigger Wed May 20 01:43:07     2026
