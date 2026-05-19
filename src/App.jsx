@@ -25,6 +25,29 @@ const GROCERY_KEYWORDS = ['牛乳','卵','たまご','野菜','肉','魚','パ�
 
 const WEEKDAY_LABELS = ["日","月","火","水","木","金","土"];
 
+// 固定タグ（削除・変更不可）
+const FIXED_TAGS = [
+  { id: "shopping", label: "買物", color: "#22d3ee", fixed: true },
+];
+
+// 買物カテゴリ
+const SHOPPING_CATEGORIES = [
+  { id: "veg",    label: "野菜・果物",     order: 1 },
+  { id: "egg",    label: "卵・納豆・豆腐", order: 2 },
+  { id: "fish",   label: "魚",            order: 3 },
+  { id: "meat",   label: "肉",            order: 4 },
+  { id: "sauce",  label: "調味料",        order: 5 },
+  { id: "frozen", label: "冷凍食品",      order: 6 },
+  { id: "other",  label: "日用品・その他", order: 7 },
+];
+
+// 日数差
+const daysSince = (ts) => {
+  if (!ts) return null;
+  const days = Math.floor((Date.now() - ts) / 86400000);
+  return days === 0 ? "今日" : `${days}日前`;
+};
+
 const fmtPrice = p => !p ? "" : (p.includes("円") ? p : p + "円");
 
 // 繰り返しラベル
@@ -524,6 +547,7 @@ function TagEditorModal({ tags, onClose, onSave, theme }) {
   const [editColor, setEditColor] = useState("");
   const nid = useRef(Date.now());
   const t = theme;
+  const fixedTags = FIXED_TAGS;
   const addTag  = () => { if(!newLabel.trim()) return; setLocalTags(p=>[...p,{id:`tag_${nid.current++}`,label:newLabel.trim(),color:newColor}]); setNewLabel(""); };
   const startEdit = tag => { setEditingId(tag.id); setEditLabel(tag.label); setEditColor(tag.color); };
   const saveEdit  = () => { if(!editLabel.trim()) return; setLocalTags(p=>p.map(x=>x.id===editingId?{...x,label:editLabel.trim(),color:editColor}:x)); setEditingId(null); };
@@ -535,6 +559,13 @@ function TagEditorModal({ tags, onClose, onSave, theme }) {
           <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
         </div>
         <div style={{ maxHeight:260,overflowY:"auto",padding:"12px 16px" }}>
+          {fixedTags.map(tag => (
+            <div key={tag.id} style={{ display:"flex",alignItems:"center",gap:10,background:t.inputBg,borderRadius:10,padding:"10px 12px",border:`1px solid ${t.border}`,marginBottom:8,opacity:0.75 }}>
+              <div style={{ width:10,height:10,borderRadius:3,background:tag.color,flexShrink:0 }}/>
+              <span style={{ flex:1,fontSize:13,color:t.text }}>{tag.label}</span>
+              <span style={{ fontSize:10,color:t.sub,background:t.chipOff,borderRadius:5,padding:"2px 6px" }}>固定</span>
+            </div>
+          ))}
           {localTags.map(tag=>(
             <div key={tag.id} style={{ marginBottom:8 }}>
               {editingId===tag.id ? (
@@ -592,6 +623,7 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
   const [memoInterim,   setMemoInterim]   = useState("");
   const stopMemoVoice = useRef(null);
   const t = theme;
+  const isShopping = tagId === "shopping";
 
   const allStores = [...new Set((todos||[]).flatMap(td => (td.storePrices||[]).map(sp => sp.store).filter(Boolean)))];
 
@@ -656,6 +688,7 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
           </div>
 
           {/* 優先度 */}
+          {isShopping && (
           <div style={{ marginTop:12 }}>
             <div style={{ fontSize:11,color:t.sub,fontWeight:600,letterSpacing:1,marginBottom:6 }}>優先度</div>
             <div style={{ display:"flex",gap:6 }}>
@@ -665,6 +698,7 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
               <button onClick={()=>setPriority("none")} style={{ flex:1,background:priority==="none"?t.inputBg:t.chipOff,color:priority==="none"?t.text:t.sub,border:priority==="none"?`1px solid ${t.inputBorder}`:"1px solid transparent",borderRadius:9,padding:"7px 0",fontSize:12,cursor:"pointer",fontFamily:"inherit" }}>なし</button>
             </div>
           </div>
+          )}
 
           {/* 締め切り */}
           <div style={{ marginTop:12 }}>
@@ -683,16 +717,19 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
 
           {/* 価格・メモセクション */}
           <div style={{ marginTop:14,padding:"12px 14px",background:t.inputBg,borderRadius:12,border:`1px solid ${t.inputBorder}` }}>
-            <div style={{ fontSize:11,color:"#a78bfa",fontWeight:700,letterSpacing:1,marginBottom:12 }}>💰 価格・メモ</div>
+            <div style={{ fontSize:11,color:"#a78bfa",fontWeight:700,letterSpacing:1,marginBottom:12 }}>{isShopping ? "💰 価格・メモ" : "📝 メモ"}</div>
 
             {/* 目安価格 */}
+            {isShopping && (
             <div style={{ marginBottom:12 }}>
               <div style={{ fontSize:11,color:t.sub,marginBottom:8 }}>目安価格</div>
               <PriceWheelPicker value={price} onChange={setPrice} theme={t}/>
               {price && <div style={{ fontSize:12, color:"#fbbf24", marginTop:4 }}>設定: {price}円</div>}
             </div>
+            )}
 
             {/* 店舗別底値 */}
+            {isShopping && (
             <div style={{ marginBottom:10 }}>
               <div style={{ fontSize:11,color:t.sub,marginBottom:6 }}>🏪 店舗別底値</div>
               <datalist id={`store-names-${todo.id}`}>
@@ -721,6 +758,7 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
               <button onClick={()=>setStorePrices(prev=>[...prev,{store:"",price:""}])}
                 style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:"5px 12px",fontSize:12,cursor:"pointer",fontFamily:"inherit" }}>＋ 店舗を追加</button>
             </div>
+            )}
 
             {/* メモ */}
             <div>
@@ -904,6 +942,81 @@ function ViewTabs({ todos, currentView, onViewChange, theme }) {
   );
 }
 
+// ─── Recipe Modal ─────────────────────────────────────────────────────────────
+function RecipeModal({ todos, onClose, theme }) {
+  const [step, setStep] = useState(1);
+  const [selected, setSelected] = useState([]);
+  const t = theme;
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const shoppingItems = todos.filter(td => !td.done && td.tagId === "shopping");
+  const stockItems    = todos.filter(td => td.done && td.tagId === "shopping" && td.completedAt && td.completedAt > sevenDaysAgo);
+  const allIngredients = [
+    ...shoppingItems.map(td => ({ key: `b_${td.id}`, text: td.text, source: "買物" })),
+    ...stockItems.map(td =>    ({ key: `s_${td.id}`, text: td.text, source: "在庫" })),
+  ];
+  const toggle = key => setSelected(p => p.includes(key) ? p.filter(x => x !== key) : [...p, key]);
+  const openSite = site => {
+    const texts = allIngredients.filter(i => selected.includes(i.key)).map(i => i.text);
+    if (!texts.length) return;
+    const q = encodeURIComponent(texts.join(" "));
+    const url = site === "delish"
+      ? `https://delishkitchen.tv/search?keyword=${q}`
+      : `https://www.kurashiru.com/search?query=${q}`;
+    window.open(url, "_blank");
+    onClose();
+  };
+  return (
+    <div style={{ position:"fixed",inset:0,zIndex:300,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
+      <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:380,boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}` }} onClick={e=>e.stopPropagation()}>
+        <div style={{ padding:"18px 20px 14px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+          <span style={{ fontSize:15,fontWeight:700,color:t.text }}>🍳 レシピアイデア</span>
+          <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
+        </div>
+        {step === 1 && (
+          <>
+            <div style={{ padding:"10px 16px 4px",fontSize:12,color:t.sub }}>食材候補を選択してください</div>
+            <div style={{ maxHeight:300,overflowY:"auto",padding:"4px 16px 12px" }}>
+              {allIngredients.length === 0 && <div style={{ color:t.subDim,fontSize:13,padding:"20px 0",textAlign:"center" }}>食材がありません</div>}
+              {allIngredients.map(item => (
+                <div key={item.key} onClick={() => toggle(item.key)}
+                  style={{ display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:`1px solid ${t.border}`,cursor:"pointer" }}>
+                  <div style={{ width:20,height:20,borderRadius:6,border:`2px solid ${selected.includes(item.key)?"#7c6af7":t.subDim}`,background:selected.includes(item.key)?"#7c6af7":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                    {selected.includes(item.key) && <span style={{ color:"#fff",fontSize:12,fontWeight:700 }}>✓</span>}
+                  </div>
+                  <span style={{ flex:1,fontSize:13,color:t.text }}>{item.text}</span>
+                  <span style={{ fontSize:10,background:item.source==="買物"?"rgba(34,211,238,0.15)":"rgba(167,139,250,0.15)",color:item.source==="買物"?"#22d3ee":"#a78bfa",borderRadius:5,padding:"1px 6px" }}>{item.source}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding:"10px 16px 16px" }}>
+              <button onClick={() => { if(selected.length>0) setStep(2); }}
+                style={{ width:"100%",background:selected.length>0?"linear-gradient(135deg,#7c6af7,#a78bfa)":t.chipOff,border:"none",borderRadius:11,color:selected.length>0?"#fff":t.subDim,fontSize:13,fontWeight:700,padding:"12px 0",cursor:selected.length>0?"pointer":"default" }}>
+                確定（{selected.length}個選択）
+              </button>
+            </div>
+          </>
+        )}
+        {step === 2 && (
+          <div style={{ padding:"16px" }}>
+            <div style={{ fontSize:13,color:t.sub,marginBottom:16,textAlign:"center" }}>レシピサイトを選択</div>
+            <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
+              <button onClick={() => openSite("delish")}
+                style={{ background:"linear-gradient(135deg,#f97316,#fb923c)",border:"none",borderRadius:12,color:"#fff",fontSize:14,fontWeight:700,padding:"14px",cursor:"pointer" }}>
+                🍽️ デリッシュキッチン
+              </button>
+              <button onClick={() => openSite("kurashiru")}
+                style={{ background:"linear-gradient(135deg,#22c55e,#4ade80)",border:"none",borderRadius:12,color:"#fff",fontSize:14,fontWeight:700,padding:"14px",cursor:"pointer" }}>
+                🥗 クラシル
+              </button>
+            </div>
+            <button onClick={() => setStep(1)} style={{ marginTop:12,width:"100%",background:"transparent",border:"none",color:t.sub,fontSize:12,cursor:"pointer" }}>← 戻る</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main App ──────────────────────────────────────────────────────────────────
 
 export default function TodoApp() {
@@ -934,6 +1047,8 @@ export default function TodoApp() {
   const [userLoc,     setUserLoc]     = useState(null);
   const [locLoading,  setLocLoading]  = useState(false);
   const [showLocModal,setShowLocModal]= useState(false);
+  const [showRecipe,    setShowRecipe]    = useState(false);
+  const [catDropdownId, setCatDropdownId] = useState(null);
   const inputRef    = useRef(null);
   const nextId      = useRef(10);
   const stopVoice   = useRef(null);
@@ -1012,8 +1127,9 @@ export default function TodoApp() {
 
   // ── Tag validity guard ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!tags.find(tg => tg.id === selectedTag) && tags.length > 0) setSelectedTag(tags[0].id);
-    if (filter !== "all" && !tags.find(tg => tg.id === filter)) setFilter("all");
+    const allTagIds = [...FIXED_TAGS, ...tags].map(tg => tg.id);
+    if (!allTagIds.includes(selectedTag) && tags.length > 0) setSelectedTag(tags[0].id);
+    if (filter !== "all" && filter !== "stock" && !allTagIds.includes(filter)) setFilter("all");
   }, [tags]);
 
   // ── Native deadline notifications ─────────────────────────────────────────
@@ -1081,7 +1197,7 @@ export default function TodoApp() {
           stopVoice.current?.();
           setListening(false);
           setInterimText("");
-        }, 2000);
+        }, 1000);
       },
       onInterim: text => setInterimText(text),
       onEnd:     () => { clearTimeout(voiceSilenceTimer.current); setListening(false); setInterimText(""); },
@@ -1160,9 +1276,9 @@ export default function TodoApp() {
         createdAt: Date.now(),
         nextAppearAt: nextDeadline,
       };
-      setTodos(prev => [nextTodo, ...prev.map(td => td.id === id ? { ...td, done: true } : td)]);
+      setTodos(prev => [nextTodo, ...prev.map(td => td.id === id ? { ...td, done: true, completedAt: Date.now() } : td)]);
     } else {
-      setTodos(prev => prev.map(td => td.id === id ? { ...td, done: !td.done } : td));
+      setTodos(prev => prev.map(td => td.id === id ? { ...td, done: !td.done, completedAt: !td.done ? Date.now() : null } : td));
     }
   };
 
@@ -1179,7 +1295,7 @@ export default function TodoApp() {
   };
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const getTag = id => tags.find(tg => tg.id === id);
+  const getTag = id => FIXED_TAGS.find(tg => tg.id === id) || tags.find(tg => tg.id === id);
 
   const applyViewFilter = (todoList) => {
     switch (sideView) {
@@ -1190,18 +1306,30 @@ export default function TodoApp() {
     }
   };
 
-  const filtered = applyViewFilter(todos)
-    .filter(td => !td.nextAppearAt || new Date(td.nextAppearAt) <= new Date())
-    .filter(td => (filter === "all" || td.tagId === filter) && (showDone || !td.done))
-    .sort((a, b) => {
-      if (sortBy === "priority") return (PRIORITY_CONFIG[a.priority||"none"].order) - (PRIORITY_CONFIG[b.priority||"none"].order);
-      if (sortBy === "deadline") {
-        if (!a.deadline && !b.deadline) return 0;
-        if (!a.deadline) return 1; if (!b.deadline) return -1;
-        return new Date(a.deadline) - new Date(b.deadline);
-      }
-      return b.createdAt - a.createdAt;
-    });
+  const isStockView = filter === "stock";
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  const filtered = isStockView
+    ? applyViewFilter(todos).filter(td =>
+        td.done && td.tagId === "shopping" && td.completedAt && td.completedAt > sevenDaysAgo
+      )
+    : applyViewFilter(todos)
+        .filter(td => !td.nextAppearAt || new Date(td.nextAppearAt) <= new Date())
+        .filter(td => (filter === "all" || td.tagId === filter) && (showDone || !td.done))
+        .sort((a, b) => {
+          if (sortBy === "aisle") {
+            const orderA = SHOPPING_CATEGORIES.find(c => c.id === a.category)?.order ?? 99;
+            const orderB = SHOPPING_CATEGORIES.find(c => c.id === b.category)?.order ?? 99;
+            return orderA - orderB;
+          }
+          if (sortBy === "priority") return (PRIORITY_CONFIG[a.priority||"none"].order) - (PRIORITY_CONFIG[b.priority||"none"].order);
+          if (sortBy === "deadline") {
+            if (!a.deadline && !b.deadline) return 0;
+            if (!a.deadline) return 1; if (!b.deadline) return -1;
+            return new Date(a.deadline) - new Date(b.deadline);
+          }
+          return b.createdAt - a.createdAt;
+        });
 
   const doneCount  = todos.filter(td => td.done).length;
   const totalCount = todos.length;
@@ -1235,6 +1363,7 @@ export default function TodoApp() {
       {showTagEd && <TagEditorModal tags={tags} onClose={() => setShowTagEd(false)} onSave={tgs => { setTags(tgs); setShowTagEd(false); }} theme={t}/>}
       {editTodo  && <TodoDetailModal todo={editTodo} todos={todos} tags={tags} onClose={() => setEditTodo(null)} onSave={saveEdit} theme={t}/>}
       {showLocModal && userLoc && <LocationModal lat={userLoc.lat} lng={userLoc.lng} onClose={() => setShowLocModal(false)} theme={t}/>}
+      {showRecipe && <RecipeModal todos={todos} onClose={() => setShowRecipe(false)} theme={t}/>}
       <Assistant todos={todos} onDismiss={() => setNotification(null)} notification={notification}/>
 
       {/* Main content — full width, single column */}
@@ -1258,6 +1387,11 @@ export default function TodoApp() {
               <span style={{ fontFamily:"'Space Mono',monospace", fontSize:17, fontWeight:700, color:"#7c6af7" }}>{progress}<span style={{ fontSize:9,color:t.subDim }}>%</span></span>
               <span style={{ fontSize:11,color:t.sub }}>{doneCount}/{totalCount}</span>
             </div>
+            <button onClick={() => setShowRecipe(true)}
+              title="レシピアイデア"
+              style={{ background:"linear-gradient(135deg,#22c55e,#4ade80)", border:"none", borderRadius:10, color:"#fff", padding:"6px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, flexShrink:0, boxShadow:"0 2px 8px rgba(34,197,94,0.4)" }}>
+              🍳<span style={{whiteSpace:"nowrap"}}>レシピ</span>
+            </button>
             <button onClick={handleLocationClick}
               title="周辺お買得情報"
               style={{ background: locLoading ? "rgba(124,106,247,0.2)" : "linear-gradient(135deg,#f97316,#fb923c)", border:"none", borderRadius:10, color:"#fff", padding:"6px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, flexShrink:0, boxShadow:"0 2px 8px rgba(249,115,22,0.4)" }}>
@@ -1331,7 +1465,7 @@ export default function TodoApp() {
           )}
 
           <div style={{ display:"flex",gap:6,marginTop:10,flexWrap:"wrap",alignItems:"center" }}>
-            {tags.map(tg=>(
+            {[...FIXED_TAGS, ...tags].map(tg=>(
               <button key={tg.id} onClick={()=>setSelectedTag(tg.id)}
                 style={{ background:selectedTag===tg.id?tg.color:t.chipOff,color:selectedTag===tg.id?"#111":t.chipOffText,border:"none",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600 }}>{tg.label}</button>
             ))}
@@ -1350,7 +1484,7 @@ export default function TodoApp() {
 
         {/* Filter row */}
         <div style={{ padding:"7px 12px 4px", display:"flex", gap:5, alignItems:"center", background:t.card, overflowX:"auto", scrollbarWidth:"none" }}>
-          {[{id:"all",label:"すべて"},...tags].map(tg=>(
+          {[{id:"all",label:"すべて"}, ...FIXED_TAGS, {id:"stock",label:"在庫"}, ...tags].map(tg=>(
             <button key={tg.id} onClick={()=>setFilter(tg.id)}
               style={{ background:filter===tg.id?"rgba(124,106,247,0.18)":"transparent", color:filter===tg.id?"#a78bfa":t.sub, border:filter===tg.id?"1px solid rgba(124,106,247,0.35)":"1px solid transparent", borderRadius:8, padding:"5px 12px", fontSize:13, fontWeight:500, whiteSpace:"nowrap" }}>{tg.label}</button>
           ))}
@@ -1358,7 +1492,7 @@ export default function TodoApp() {
         {/* Sort row */}
         <div style={{ padding:"4px 12px 7px", display:"flex", gap:4, alignItems:"center", background:t.card, borderBottom:`1px solid ${t.border}` }}>
           <span style={{ fontSize:11, color:t.subDim, marginRight:4 }}>並べ替え:</span>
-          {[{k:"created",l:"新着"},{k:"priority",l:"優先度"},{k:"deadline",l:"期限"}].map(({k,l})=>(
+          {[...(filter==="shopping"?[{k:"aisle",l:"売り場順"}]:[]),{k:"created",l:"新着"},{k:"priority",l:"優先度"},{k:"deadline",l:"期限"}].map(({k,l})=>(
             <button key={k} onClick={()=>setSortBy(k)}
               style={{ background:sortBy===k?isLight?"rgba(0,0,0,0.09)":"rgba(255,255,255,0.1)":"transparent", color:sortBy===k?t.text:t.subDim, border:sortBy===k?`1px solid ${t.border}`:"none", borderRadius:8, padding:"5px 12px", fontSize:13, fontWeight:sortBy===k?700:400 }}>{l}</button>
           ))}
@@ -1376,6 +1510,7 @@ export default function TodoApp() {
             const repeatLabel = getRepeatLabel(todo.repeat);
             const showGrocery = userLoc && isGrocery(todo.text);
             const hasPrice = todo.price || (todo.storePrices?.length > 0);
+            const catLabel = SHOPPING_CATEGORIES.find(c => c.id === todo.category)?.label;
             return (
               <div
                 key={todo.id}
@@ -1388,13 +1523,39 @@ export default function TodoApp() {
                   opacity:todo.done?0.5:1,
                   userSelect: "none",
                 }}>
-                <button onClick={()=>toggleTodo(todo.id)}
-                  style={{ width:28,height:28,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:todo.done?"linear-gradient(135deg,#7c6af7,#a78bfa)":t.chipOff,color:todo.done?"#fff":t.sub,border:"none",marginTop:1 }}>
-                  <CheckIcon done={todo.done}/>
-                </button>
+                {!isStockView ? (
+                  <button onClick={()=>toggleTodo(todo.id)}
+                    style={{ width:28,height:28,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:todo.done?"linear-gradient(135deg,#7c6af7,#a78bfa)":t.chipOff,color:todo.done?"#fff":t.sub,border:"none",marginTop:1 }}>
+                    <CheckIcon done={todo.done}/>
+                  </button>
+                ) : (
+                  <div style={{ width:28,height:28,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(34,211,238,0.15)",color:"#22d3ee",fontSize:10,fontWeight:700,marginTop:1 }}>✓</div>
+                )}
                 <div style={{ flex:1,minWidth:0 }}>
                   <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                     <span style={{ fontSize:14,color:todo.done?t.sub:t.text,textDecoration:todo.done?"line-through":"none",wordBreak:"break-word",lineHeight:1.5 }}>{todo.text}</span>
+                    {todo.tagId === "shopping" && !isStockView && (
+                      <div style={{ position:"relative", display:"inline-flex" }}>
+                        <button
+                          onClick={e => { e.stopPropagation(); setCatDropdownId(catDropdownId === todo.id ? null : todo.id); }}
+                          style={{ fontSize:10, background:catLabel?"rgba(34,211,238,0.15)":t.chipOff, color:catLabel?"#22d3ee":t.subDim, border:"none", borderRadius:5, padding:"1px 7px", cursor:"pointer", whiteSpace:"nowrap" }}>
+                          {catLabel || "分類"}
+                        </button>
+                        {catDropdownId === todo.id && (
+                          <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, zIndex:100, background:t.card, border:`1px solid ${t.border}`, borderRadius:10, boxShadow:"0 8px 24px rgba(0,0,0,0.4)", minWidth:140, overflow:"hidden" }}>
+                            <div onClick={e=>{e.stopPropagation();setTodos(prev=>prev.map(td=>td.id===todo.id?{...td,category:null}:td));setCatDropdownId(null);}}
+                              style={{ padding:"8px 14px", fontSize:12, color:t.sub, cursor:"pointer", borderBottom:`1px solid ${t.border}` }}>分類なし</div>
+                            {SHOPPING_CATEGORIES.map(cat => (
+                              <div key={cat.id}
+                                onClick={e=>{e.stopPropagation();setTodos(prev=>prev.map(td=>td.id===todo.id?{...td,category:cat.id}:td));setCatDropdownId(null);}}
+                                style={{ padding:"8px 14px", fontSize:12, color:todo.category===cat.id?"#22d3ee":t.text, background:todo.category===cat.id?"rgba(34,211,238,0.08)":"transparent", cursor:"pointer", borderBottom:`1px solid ${t.border}` }}>
+                                {cat.label}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {showGrocery && (
                       <span style={{ fontSize:10, background:"rgba(251,146,60,0.2)", color:"#fb923c", borderRadius:5, padding:"1px 6px", fontWeight:700, flexShrink:0 }}>🛒</span>
                     )}
@@ -1406,6 +1567,11 @@ export default function TodoApp() {
                     {repeatLabel && (
                       <span style={{ fontSize:10, color:"#a78bfa", display:"flex", alignItems:"center", gap:2 }}>
                         <RepeatIcon size={10}/> {repeatLabel}
+                      </span>
+                    )}
+                    {isStockView && todo.completedAt && (
+                      <span style={{ fontSize:10, color:"#22d3ee", background:"rgba(34,211,238,0.12)", borderRadius:5, padding:"1px 7px" }}>
+                        🗓️ {daysSince(todo.completedAt)}
                       </span>
                     )}
                     {todo.price && (
