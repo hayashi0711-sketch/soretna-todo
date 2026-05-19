@@ -27,7 +27,8 @@ const WEEKDAY_LABELS = ["日","月","火","水","木","金","土"];
 
 // 固定タグ（削除・変更不可）
 const FIXED_TAGS = [
-  { id: "shopping", label: "買物", color: "#22d3ee", fixed: true },
+  { id: "shopping", label: "買物",    color: "#22d3ee", fixed: true },
+  { id: "stock",    label: "ストック有", color: "#a78bfa", fixed: true },
 ];
 
 // 買物カテゴリ
@@ -40,6 +41,17 @@ const SHOPPING_CATEGORIES = [
   { id: "frozen", label: "冷凍食品",      order: 6 },
   { id: "other",  label: "日用品・その他", order: 7 },
 ];
+
+// カテゴリカラー
+const CATEGORY_COLORS = {
+  veg:    { bg: "rgba(134,239,172,0.25)", color: "#22c55e" },
+  egg:    { bg: "rgba(251,191,36,0.25)",  color: "#fbbf24" },
+  fish:   { bg: "rgba(96,165,250,0.25)",  color: "#60a5fa" },
+  meat:   { bg: "rgba(248,113,113,0.25)", color: "#f87171" },
+  sauce:  { bg: "rgba(251,146,60,0.25)",  color: "#fb923c" },
+  frozen: { bg: "rgba(167,139,250,0.25)", color: "#a78bfa" },
+  other:  { bg: "rgba(156,163,175,0.25)", color: "#9ca3af" },
+};
 
 // 日数差
 const daysSince = (ts) => {
@@ -619,6 +631,7 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
   const [price,         setPrice]         = useState(todo.price ? todo.price.replace(/[^0-9]/g,'') : "");
   const [memo,          setMemo]          = useState(todo.memo || "");
   const [storePrices,   setStorePrices]   = useState(todo.storePrices || []);
+  const [category,      setCategory]      = useState(todo.category || null);
   const [memoListening, setMemoListening] = useState(false);
   const [memoInterim,   setMemoInterim]   = useState("");
   const stopMemoVoice = useRef(null);
@@ -634,7 +647,7 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
   };
 
   const handleSave = () => {
-    onSave({ ...todo, text: text.trim()||todo.text, tagId, priority, deadline, repeat, price: price||null, memo: memo||null, storePrices });
+    onSave({ ...todo, text: text.trim()||todo.text, tagId, priority, deadline, repeat, price: price||null, memo: memo||null, storePrices, category });
   };
 
   const toggleMemoVoice = async () => {
@@ -681,11 +694,33 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
           <div style={{ marginTop:12 }}>
             <div style={{ fontSize:11,color:t.sub,fontWeight:600,letterSpacing:1,marginBottom:6 }}>タグ</div>
             <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
-              {tags.map(tg=>(
+              {[...FIXED_TAGS.filter(tg=>tg.id!=="stock"), ...tags].map(tg=>(
                 <button key={tg.id} onClick={()=>setTagId(tg.id)} style={{ background:tagId===tg.id?tg.color:t.chipOff,color:tagId===tg.id?"#111":t.sub,border:"none",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit" }}>{tg.label}</button>
               ))}
             </div>
           </div>
+
+          {/* 分類（買物タスクのみ） */}
+          {isShopping && (
+          <div style={{ marginTop:12 }}>
+            <div style={{ fontSize:11,color:t.sub,fontWeight:600,letterSpacing:1,marginBottom:6 }}>分類</div>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+              {SHOPPING_CATEGORIES.map(cat => {
+                const cc = CATEGORY_COLORS[cat.id];
+                const active = category === cat.id;
+                return (
+                  <button key={cat.id} onClick={() => setCategory(active ? null : cat.id)}
+                    style={{ background:active?cc.bg:t.chipOff, color:active?cc.color:t.sub,
+                      border:active?`1px solid ${cc.color}60`:"1px solid transparent",
+                      borderRadius:8, padding:"6px 12px", fontSize:12, fontWeight:active?700:400,
+                      cursor:"pointer", fontFamily:"inherit" }}>
+                    {cat.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          )}
 
           {/* 優先度 */}
           {isShopping && (
@@ -944,25 +979,24 @@ function ViewTabs({ todos, currentView, onViewChange, theme }) {
 
 // ─── Recipe Modal ─────────────────────────────────────────────────────────────
 function RecipeModal({ todos, onClose, theme }) {
-  const [step, setStep] = useState(1);
   const [selected, setSelected] = useState([]);
   const t = theme;
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const shoppingItems = todos.filter(td => !td.done && td.tagId === "shopping");
-  const stockItems    = todos.filter(td => td.done && td.tagId === "shopping" && td.completedAt && td.completedAt > sevenDaysAgo);
+  const stockItems    = [
+    ...todos.filter(td => td.tagId === "stock"),
+    ...todos.filter(td => td.done && td.tagId === "shopping" && td.completedAt && td.completedAt > sevenDaysAgo),
+  ];
   const allIngredients = [
     ...shoppingItems.map(td => ({ key: `b_${td.id}`, text: td.text, source: "買物" })),
-    ...stockItems.map(td =>    ({ key: `s_${td.id}`, text: td.text, source: "在庫" })),
+    ...stockItems.map(td =>    ({ key: `s_${td.id}`, text: td.text, source: "ストック有" })),
   ];
   const toggle = key => setSelected(p => p.includes(key) ? p.filter(x => x !== key) : [...p, key]);
-  const openSite = site => {
+  const openKurashiru = () => {
     const texts = allIngredients.filter(i => selected.includes(i.key)).map(i => i.text);
     if (!texts.length) return;
     const q = encodeURIComponent(texts.join(" "));
-    const url = site === "delish"
-      ? `https://delishkitchen.tv/search?keyword=${q}`
-      : `https://www.kurashiru.com/search?query=${q}`;
-    window.open(url, "_blank");
+    window.open(`https://www.kurashiru.com/search?query=${q}`, "_blank");
     onClose();
   };
   return (
@@ -972,46 +1006,26 @@ function RecipeModal({ todos, onClose, theme }) {
           <span style={{ fontSize:15,fontWeight:700,color:t.text }}>🍳 レシピアイデア</span>
           <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
         </div>
-        {step === 1 && (
-          <>
-            <div style={{ padding:"10px 16px 4px",fontSize:12,color:t.sub }}>食材候補を選択してください</div>
-            <div style={{ maxHeight:300,overflowY:"auto",padding:"4px 16px 12px" }}>
-              {allIngredients.length === 0 && <div style={{ color:t.subDim,fontSize:13,padding:"20px 0",textAlign:"center" }}>食材がありません</div>}
-              {allIngredients.map(item => (
-                <div key={item.key} onClick={() => toggle(item.key)}
-                  style={{ display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:`1px solid ${t.border}`,cursor:"pointer" }}>
-                  <div style={{ width:20,height:20,borderRadius:6,border:`2px solid ${selected.includes(item.key)?"#7c6af7":t.subDim}`,background:selected.includes(item.key)?"#7c6af7":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-                    {selected.includes(item.key) && <span style={{ color:"#fff",fontSize:12,fontWeight:700 }}>✓</span>}
-                  </div>
-                  <span style={{ flex:1,fontSize:13,color:t.text }}>{item.text}</span>
-                  <span style={{ fontSize:10,background:item.source==="買物"?"rgba(34,211,238,0.15)":"rgba(167,139,250,0.15)",color:item.source==="買物"?"#22d3ee":"#a78bfa",borderRadius:5,padding:"1px 6px" }}>{item.source}</span>
-                </div>
-              ))}
+        <div style={{ padding:"10px 16px 4px",fontSize:12,color:t.sub }}>食材を選択してクラシルでレシピ検索</div>
+        <div style={{ maxHeight:320,overflowY:"auto",padding:"4px 16px 12px" }}>
+          {allIngredients.length === 0 && <div style={{ color:t.subDim,fontSize:13,padding:"20px 0",textAlign:"center" }}>食材がありません</div>}
+          {allIngredients.map(item => (
+            <div key={item.key} onClick={() => toggle(item.key)}
+              style={{ display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:`1px solid ${t.border}`,cursor:"pointer" }}>
+              <div style={{ width:20,height:20,borderRadius:6,border:`2px solid ${selected.includes(item.key)?"#7c6af7":t.subDim}`,background:selected.includes(item.key)?"#7c6af7":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                {selected.includes(item.key) && <span style={{ color:"#fff",fontSize:12,fontWeight:700 }}>✓</span>}
+              </div>
+              <span style={{ flex:1,fontSize:13,color:t.text }}>{item.text}</span>
+              <span style={{ fontSize:10,background:item.source==="買物"?"rgba(34,211,238,0.15)":"rgba(167,139,250,0.15)",color:item.source==="買物"?"#22d3ee":"#a78bfa",borderRadius:5,padding:"1px 6px" }}>{item.source}</span>
             </div>
-            <div style={{ padding:"10px 16px 16px" }}>
-              <button onClick={() => { if(selected.length>0) setStep(2); }}
-                style={{ width:"100%",background:selected.length>0?"linear-gradient(135deg,#7c6af7,#a78bfa)":t.chipOff,border:"none",borderRadius:11,color:selected.length>0?"#fff":t.subDim,fontSize:13,fontWeight:700,padding:"12px 0",cursor:selected.length>0?"pointer":"default" }}>
-                確定（{selected.length}個選択）
-              </button>
-            </div>
-          </>
-        )}
-        {step === 2 && (
-          <div style={{ padding:"16px" }}>
-            <div style={{ fontSize:13,color:t.sub,marginBottom:16,textAlign:"center" }}>レシピサイトを選択</div>
-            <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
-              <button onClick={() => openSite("delish")}
-                style={{ background:"linear-gradient(135deg,#f97316,#fb923c)",border:"none",borderRadius:12,color:"#fff",fontSize:14,fontWeight:700,padding:"14px",cursor:"pointer" }}>
-                🍽️ デリッシュキッチン
-              </button>
-              <button onClick={() => openSite("kurashiru")}
-                style={{ background:"linear-gradient(135deg,#22c55e,#4ade80)",border:"none",borderRadius:12,color:"#fff",fontSize:14,fontWeight:700,padding:"14px",cursor:"pointer" }}>
-                🥗 クラシル
-              </button>
-            </div>
-            <button onClick={() => setStep(1)} style={{ marginTop:12,width:"100%",background:"transparent",border:"none",color:t.sub,fontSize:12,cursor:"pointer" }}>← 戻る</button>
-          </div>
-        )}
+          ))}
+        </div>
+        <div style={{ padding:"10px 16px 16px" }}>
+          <button onClick={openKurashiru}
+            style={{ width:"100%",background:selected.length>0?"linear-gradient(135deg,#22c55e,#4ade80)":t.chipOff,border:"none",borderRadius:11,color:selected.length>0?"#fff":t.subDim,fontSize:13,fontWeight:700,padding:"13px 0",cursor:selected.length>0?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+            🥗 クラシルで検索（{selected.length}個選択）
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1048,7 +1062,6 @@ export default function TodoApp() {
   const [locLoading,  setLocLoading]  = useState(false);
   const [showLocModal,setShowLocModal]= useState(false);
   const [showRecipe,    setShowRecipe]    = useState(false);
-  const [catDropdownId, setCatDropdownId] = useState(null);
   const inputRef    = useRef(null);
   const nextId      = useRef(10);
   const stopVoice   = useRef(null);
@@ -1311,7 +1324,8 @@ export default function TodoApp() {
 
   const filtered = isStockView
     ? applyViewFilter(todos).filter(td =>
-        td.done && td.tagId === "shopping" && td.completedAt && td.completedAt > sevenDaysAgo
+        td.tagId === "stock" ||
+        (td.done && td.tagId === "shopping" && td.completedAt && td.completedAt > sevenDaysAgo)
       )
     : applyViewFilter(todos)
         .filter(td => !td.nextAppearAt || new Date(td.nextAppearAt) <= new Date())
@@ -1528,34 +1542,22 @@ export default function TodoApp() {
                     style={{ width:28,height:28,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:todo.done?"linear-gradient(135deg,#7c6af7,#a78bfa)":t.chipOff,color:todo.done?"#fff":t.sub,border:"none",marginTop:1 }}>
                     <CheckIcon done={todo.done}/>
                   </button>
+                ) : todo.tagId === "stock" ? (
+                  <div style={{ width:28,height:28,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(167,139,250,0.15)",color:"#a78bfa",fontSize:16,fontWeight:700,marginTop:1 }}>📦</div>
                 ) : (
                   <div style={{ width:28,height:28,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(34,211,238,0.15)",color:"#22d3ee",fontSize:10,fontWeight:700,marginTop:1 }}>✓</div>
                 )}
                 <div style={{ flex:1,minWidth:0 }}>
                   <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                     <span style={{ fontSize:14,color:todo.done?t.sub:t.text,textDecoration:todo.done?"line-through":"none",wordBreak:"break-word",lineHeight:1.5 }}>{todo.text}</span>
-                    {todo.tagId === "shopping" && !isStockView && (
-                      <div style={{ position:"relative", display:"inline-flex" }}>
-                        <button
-                          onClick={e => { e.stopPropagation(); setCatDropdownId(catDropdownId === todo.id ? null : todo.id); }}
-                          style={{ fontSize:10, background:catLabel?"rgba(34,211,238,0.15)":t.chipOff, color:catLabel?"#22d3ee":t.subDim, border:"none", borderRadius:5, padding:"1px 7px", cursor:"pointer", whiteSpace:"nowrap" }}>
-                          {catLabel || "分類"}
-                        </button>
-                        {catDropdownId === todo.id && (
-                          <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, zIndex:100, background:t.card, border:`1px solid ${t.border}`, borderRadius:10, boxShadow:"0 8px 24px rgba(0,0,0,0.4)", minWidth:140, overflow:"hidden" }}>
-                            <div onClick={e=>{e.stopPropagation();setTodos(prev=>prev.map(td=>td.id===todo.id?{...td,category:null}:td));setCatDropdownId(null);}}
-                              style={{ padding:"8px 14px", fontSize:12, color:t.sub, cursor:"pointer", borderBottom:`1px solid ${t.border}` }}>分類なし</div>
-                            {SHOPPING_CATEGORIES.map(cat => (
-                              <div key={cat.id}
-                                onClick={e=>{e.stopPropagation();setTodos(prev=>prev.map(td=>td.id===todo.id?{...td,category:cat.id}:td));setCatDropdownId(null);}}
-                                style={{ padding:"8px 14px", fontSize:12, color:todo.category===cat.id?"#22d3ee":t.text, background:todo.category===cat.id?"rgba(34,211,238,0.08)":"transparent", cursor:"pointer", borderBottom:`1px solid ${t.border}` }}>
-                                {cat.label}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {todo.tagId === "shopping" && catLabel && (() => {
+                      const cc = CATEGORY_COLORS[todo.category] || {};
+                      return (
+                        <span style={{ fontSize:10, fontWeight:700, background:cc.bg, color:cc.color, borderRadius:5, padding:"1px 7px", flexShrink:0 }}>
+                          {catLabel}
+                        </span>
+                      );
+                    })()}
                     {showGrocery && (
                       <span style={{ fontSize:10, background:"rgba(251,146,60,0.2)", color:"#fb923c", borderRadius:5, padding:"1px 6px", fontWeight:700, flexShrink:0 }}>🛒</span>
                     )}
