@@ -1511,7 +1511,7 @@ export default function TodoApp() {
         {/* Sort row */}
         <div style={{ padding:"4px 12px 7px", display:"flex", gap:4, alignItems:"center", background:t.card, borderBottom:`1px solid ${t.border}` }}>
           <span style={{ fontSize:11, color:t.subDim, marginRight:4 }}>並べ替え:</span>
-          {[...(filter==="shopping"?[{k:"aisle",l:"売り場順"}]:[]),{k:"created",l:"新着"},{k:"priority",l:"優先度"},{k:"deadline",l:"期限"}].map(({k,l})=>(
+          {[...(filter==="shopping"?[{k:"aisle",l:"売り場順"}]:[]),{k:"created",l:"新着"},...(filter!=="shopping"?[{k:"priority",l:"優先度"}]:[]),{k:"deadline",l:"期限"}].map(({k,l})=>(
             <button key={k} onClick={()=>setSortBy(k)}
               style={{ background:sortBy===k?isLight?"rgba(0,0,0,0.09)":"rgba(255,255,255,0.1)":"transparent", color:sortBy===k?t.text:t.subDim, border:sortBy===k?`1px solid ${t.border}`:"none", borderRadius:8, padding:"5px 12px", fontSize:13, fontWeight:sortBy===k?700:400 }}>{l}</button>
           ))}
