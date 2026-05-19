@@ -1431,17 +1431,25 @@ export default function TodoApp() {
           <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#7c6af7,#a78bfa)", transition:"width 0.5s cubic-bezier(.4,0,.2,1)" }}/>
         </div>
 
-        {/* Input area */}
+        {/* ── ① タグ管理 ＋ タグ選択チップ ── */}
         <div style={{ padding:"10px 16px 10px", borderBottom:`1px solid ${t.border}`, background:t.card }}>
-          {/* タグ管理 row */}
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
             <span style={{ fontSize:11, color:t.subDim, fontWeight:600, letterSpacing:1 }}>タグ管理</span>
             <button onClick={()=>setShowTagEd(true)}
               style={{ background:t.chipOff, color:t.sub, border:"none", borderRadius:8, padding:"5px 12px", fontSize:12, display:"flex", alignItems:"center", gap:4 }}>
               <TagIcon size={12}/> タグを管理
             </button>
           </div>
-          {/* タスク入力 */}
+          <div style={{ display:"flex",gap:6,flexWrap:"wrap",alignItems:"center" }}>
+            {[...FIXED_TAGS, ...tags].map(tg=>(
+              <button key={tg.id} onClick={()=>setSelectedTag(tg.id)}
+                style={{ background:selectedTag===tg.id?tg.color:t.chipOff,color:selectedTag===tg.id?"#111":t.chipOffText,border:"none",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600 }}>{tg.label}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── ② タスク入力フィールド ── */}
+        <div style={{ padding:"10px 16px 10px", borderBottom:`1px solid ${t.border}`, background:t.card }}>
           <div style={{ position:"relative", display:"flex", gap:8, background:t.inputBg, borderRadius:14, padding:"4px 6px 4px 14px", border:`1px solid ${t.inputBorder}`, alignItems:"center", touchAction:"manipulation" }}>
             <input ref={inputRef} readOnly={listening} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTodo()}
               placeholder={listening ? (interimText || "聞いています…") : "新しいタスクを入力…"} enterKeyHint="done"
@@ -1491,13 +1499,6 @@ export default function TodoApp() {
               )}
             </div>
           )}
-
-          <div style={{ display:"flex",gap:6,marginTop:10,flexWrap:"wrap",alignItems:"center" }}>
-            {[...FIXED_TAGS, ...tags].map(tg=>(
-              <button key={tg.id} onClick={()=>setSelectedTag(tg.id)}
-                style={{ background:selectedTag===tg.id?tg.color:t.chipOff,color:selectedTag===tg.id?"#111":t.chipOffText,border:"none",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600 }}>{tg.label}</button>
-            ))}
-          </div>
         </div>
 
         {/* Filter row */}
