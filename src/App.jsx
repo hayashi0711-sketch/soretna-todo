@@ -33,24 +33,28 @@ const FIXED_TAGS = [
 
 // 買物カテゴリ
 const SHOPPING_CATEGORIES = [
-  { id: "veg",    label: "野菜・果物",     order: 1 },
-  { id: "egg",    label: "卵・納豆・豆腐", order: 2 },
-  { id: "fish",   label: "魚",            order: 3 },
-  { id: "meat",   label: "肉",            order: 4 },
-  { id: "sauce",  label: "調味料",        order: 5 },
-  { id: "frozen", label: "冷凍食品",      order: 6 },
-  { id: "other",  label: "日用品・その他", order: 7 },
+  { id: "veg",     label: "野菜・果物",        order: 1 },
+  { id: "tofu",    label: "豆腐・納豆",         order: 2 },
+  { id: "dairy",   label: "乳製品・卵",         order: 3 },
+  { id: "fish",    label: "魚",                order: 4 },
+  { id: "meat",    label: "肉",                order: 5 },
+  { id: "frozen",  label: "冷凍食品・惣菜",     order: 6 },
+  { id: "sauce",   label: "調味料・油・乾物",   order: 7 },
+  { id: "snack",   label: "お菓子・飲料・お酒", order: 8 },
+  { id: "other",   label: "日用品・その他",     order: 9 },
 ];
 
 // カテゴリカラー
 const CATEGORY_COLORS = {
-  veg:    { bg: "rgba(134,239,172,0.25)", color: "#22c55e" },
-  egg:    { bg: "rgba(251,191,36,0.25)",  color: "#fbbf24" },
-  fish:   { bg: "rgba(96,165,250,0.25)",  color: "#60a5fa" },
-  meat:   { bg: "rgba(248,113,113,0.25)", color: "#f87171" },
-  sauce:  { bg: "rgba(251,146,60,0.25)",  color: "#fb923c" },
-  frozen: { bg: "rgba(167,139,250,0.25)", color: "#a78bfa" },
-  other:  { bg: "rgba(156,163,175,0.25)", color: "#9ca3af" },
+  veg:    { bg: "rgba(134,239,172,0.28)", color: "#16a34a" }, // 緑
+  tofu:   { bg: "rgba(253,224,71,0.28)",  color: "#ca8a04" }, // 黄
+  dairy:  { bg: "rgba(251,191,36,0.28)",  color: "#d97706" }, // 琥珀
+  fish:   { bg: "rgba(96,165,250,0.28)",  color: "#2563eb" }, // 青
+  meat:   { bg: "rgba(248,113,113,0.28)", color: "#dc2626" }, // 赤
+  frozen: { bg: "rgba(147,197,253,0.28)", color: "#0284c7" }, // 水色
+  sauce:  { bg: "rgba(251,146,60,0.28)",  color: "#c2410c" }, // 橙
+  snack:  { bg: "rgba(244,114,182,0.28)", color: "#be185d" }, // ピンク
+  other:  { bg: "rgba(156,163,175,0.28)", color: "#6b7280" }, // グレー
 };
 
 // 日数差
@@ -718,19 +722,6 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
                   </button>
                 );
               })}
-            </div>
-          </div>
-          )}
-
-          {/* 優先度 */}
-          {isShopping && (
-          <div style={{ marginTop:12 }}>
-            <div style={{ fontSize:11,color:t.sub,fontWeight:600,letterSpacing:1,marginBottom:6 }}>優先度</div>
-            <div style={{ display:"flex",gap:6 }}>
-              {Object.entries(PRIORITY_CONFIG).filter(([k])=>k!=="none").map(([k,v])=>(
-                <button key={k} onClick={()=>setPriority(k)} style={{ flex:1,background:priority===k?v.bg:t.chipOff,color:priority===k?v.color:t.sub,border:priority===k?`1px solid ${v.color}40`:"1px solid transparent",borderRadius:9,padding:"7px 0",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit" }}>{v.label}</button>
-              ))}
-              <button onClick={()=>setPriority("none")} style={{ flex:1,background:priority==="none"?t.inputBg:t.chipOff,color:priority==="none"?t.text:t.sub,border:priority==="none"?`1px solid ${t.inputBorder}`:"1px solid transparent",borderRadius:9,padding:"7px 0",fontSize:12,cursor:"pointer",fontFamily:"inherit" }}>なし</button>
             </div>
           </div>
           )}
