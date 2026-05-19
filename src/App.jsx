@@ -641,6 +641,7 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
   const stopMemoVoice = useRef(null);
   const t = theme;
   const isShopping = tagId === "shopping";
+  const showPriority = !FIXED_TAGS.find(ft => ft.id === tagId);
 
   const allStores = [...new Set((todos||[]).flatMap(td => (td.storePrices||[]).map(sp => sp.store).filter(Boolean)))];
 
@@ -722,6 +723,19 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
                   </button>
                 );
               })}
+            </div>
+          </div>
+          )}
+
+          {/* 優先度（固定タグ以外） */}
+          {showPriority && (
+          <div style={{ marginTop:12 }}>
+            <div style={{ fontSize:11,color:t.sub,fontWeight:600,letterSpacing:1,marginBottom:6 }}>優先度</div>
+            <div style={{ display:"flex",gap:6 }}>
+              {Object.entries(PRIORITY_CONFIG).filter(([k])=>k!=="none").map(([k,v])=>(
+                <button key={k} onClick={()=>setPriority(k)} style={{ flex:1,background:priority===k?v.bg:t.chipOff,color:priority===k?v.color:t.sub,border:priority===k?`1px solid ${v.color}40`:"1px solid transparent",borderRadius:9,padding:"7px 0",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit" }}>{v.label}</button>
+              ))}
+              <button onClick={()=>setPriority("none")} style={{ flex:1,background:priority==="none"?t.inputBg:t.chipOff,color:priority==="none"?t.text:t.sub,border:priority==="none"?`1px solid ${t.inputBorder}`:"1px solid transparent",borderRadius:9,padding:"7px 0",fontSize:12,cursor:"pointer",fontFamily:"inherit" }}>なし</button>
             </div>
           </div>
           )}
@@ -1418,7 +1432,16 @@ export default function TodoApp() {
         </div>
 
         {/* Input area */}
-        <div style={{ padding:"14px 16px 10px", borderBottom:`1px solid ${t.border}`, background:t.card }}>
+        <div style={{ padding:"10px 16px 10px", borderBottom:`1px solid ${t.border}`, background:t.card }}>
+          {/* タグ管理 row */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+            <span style={{ fontSize:11, color:t.subDim, fontWeight:600, letterSpacing:1 }}>タグ管理</span>
+            <button onClick={()=>setShowTagEd(true)}
+              style={{ background:t.chipOff, color:t.sub, border:"none", borderRadius:8, padding:"5px 12px", fontSize:12, display:"flex", alignItems:"center", gap:4 }}>
+              <TagIcon size={12}/> タグを管理
+            </button>
+          </div>
+          {/* タスク入力 */}
           <div style={{ position:"relative", display:"flex", gap:8, background:t.inputBg, borderRadius:14, padding:"4px 6px 4px 14px", border:`1px solid ${t.inputBorder}`, alignItems:"center", touchAction:"manipulation" }}>
             <input ref={inputRef} readOnly={listening} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTodo()}
               placeholder={listening ? (interimText || "聞いています…") : "新しいタスクを入力…"} enterKeyHint="done"
@@ -1474,10 +1497,6 @@ export default function TodoApp() {
               <button key={tg.id} onClick={()=>setSelectedTag(tg.id)}
                 style={{ background:selectedTag===tg.id?tg.color:t.chipOff,color:selectedTag===tg.id?"#111":t.chipOffText,border:"none",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:600 }}>{tg.label}</button>
             ))}
-            <button onClick={()=>setShowTagEd(true)}
-              style={{ background:t.chipOff,color:t.sub,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,display:"flex",alignItems:"center",gap:4,marginLeft:"auto" }}>
-              <TagIcon size={11}/> タグ管理
-            </button>
           </div>
         </div>
 
