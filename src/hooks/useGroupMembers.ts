@@ -3,6 +3,7 @@ import {
   doc,
   updateDoc,
   Timestamp,
+  deleteField,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { GroupMember } from './useGroups';
@@ -46,29 +47,10 @@ export const useGroupMembers = (): UseGroupMembersReturn => {
       try {
         const groupRef = doc(db, 'groups', groupId);
 
-        // Firestore では、フィールドを削除するために deleteField() を使用する必要があります
-        // しかし、ここでは updateDoc を使用して members.userId を削除します
-        const updateData: any = {
-          updatedAt: Timestamp.now(),
-        };
-
-        // members サブフィールドを削除するため、アンダースコア記法を使用
-        updateData[`members.${userId}`] = undefined;
-
-        // undefined を使用してフィールドを削除
         await updateDoc(groupRef, {
-          ...Object.fromEntries(
-            Object.entries(updateData).filter(([, v]) => v !== undefined)
-          ),
+          [`members.${userId}`]: deleteField(),
           updatedAt: Timestamp.now(),
         });
-
-        // 正しい実装: deleteField() をインポートして使用
-        // import { deleteField } from 'firebase/firestore';
-        // await updateDoc(groupRef, {
-        //   [`members.${userId}`]: deleteField(),
-        // });
-
       } catch (err) {
         console.error('Error removing member from group:', err);
         throw err;
