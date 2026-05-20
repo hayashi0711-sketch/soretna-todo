@@ -12,8 +12,23 @@ import { auth, db } from './firebase';
 
 const LOCAL_KEY = 'syncGroupId';
 
+// App.jsx の FIXED_TAGS と同期して定義（タグ定義の Firestore 保存に使用）
+const FIXED_TAG_DEFS = [
+  { id: 'shopping', label: '買物',     color: '#22d3ee' },
+  { id: 'stock',    label: 'ストック有', color: '#a78bfa' },
+];
+
 function randomCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
+// sharedTagIds に対応するタグ定義オブジェクト配列を返す
+function buildSharedTagDefs(sharedTagIds, userTags) {
+  const allDefs = [...FIXED_TAG_DEFS, ...userTags];
+  return sharedTagIds
+    .map(id => allDefs.find(t => t.id === id))
+    .filter(Boolean)
+    .map(({ id, label, color }) => ({ id, label, color }));
 }
 
 export function useSync({ todos, setTodos, tags, setTags, sharedFixedTagIds = [], setSharedFixedTagIds }) {
@@ -50,10 +65,20 @@ export function useSync({ todos, setTodos, tags, setTags, sharedFixedTagIds = []
       const data = snap.data();
       setGroupCode(data.inviteCode || null);
       setMemberCount((data.memberUids || []).length);
-      // tags の shared フラグを更新
-      const sharedIds = data.sharedTagIds || [];
-      setTags(prev => prev.map(tg => ({ ...tg, shared: sharedIds.includes(tg.id) })));
-      setSharedFixedTagIds(['shopping', 'stock'].filter(id => sharedIds.includes(id)));
+      const sharedIds   = data.sharedTagIds || [];
+      const sharedDefs  = data.sharedTags   || [];
+      const fixedIds    = FIXED_TAG_DEFS.map(t => t.id);
+      setTags(prev => {
+        // 他メンバーが追加した未知のタグをローカルにマージ
+        const known = new Map(prev.map(t => [t.id, t]));
+        sharedDefs.forEach(def => {
+          if (!fixedIds.includes(def.id) && !known.has(def.id)) {
+            known.set(def.id, { ...def, shared: true });
+          }
+        });
+        return [...known.values()].map(tg => ({ ...tg, shared: sharedIds.includes(tg.id) }));
+      });
+      setSharedFixedTagIds(fixedIds.filter(id => sharedIds.includes(id)));
     });
     return unsub;
   }, [groupId, setTags, setSharedFixedTagIds]);
@@ -125,6 +150,7 @@ export function useSync({ todos, setTodos, tags, setTags, sharedFixedTagIds = []
       inviteCode:   code,
       memberUids:   [user.uid],
       sharedTagIds: allSharedIds,
+      sharedTags:   buildSharedTagDefs(allSharedIds, tags),
       createdAt:    Date.now(),
     });
 
@@ -196,15 +222,18 @@ export function useSync({ todos, setTodos, tags, setTags, sharedFixedTagIds = []
     setSharedFixedTagIds([]);
   }, [setTags, setSharedFixedTagIds]);
 
-  // ── 共有タグIDをFirestoreに保存 ─────────────────────────────────────────
+  // ── 共有タグIDとタグ定義をFirestoreに保存 ──────────────────────────────
   const updateSharedTagIds = useCallback(async (sharedTagIds) => {
     if (!groupId) return;
     try {
-      await setDoc(doc(db, 'groups', groupId), { sharedTagIds }, { merge: true });
+      await setDoc(doc(db, 'groups', groupId), {
+        sharedTagIds,
+        sharedTags: buildSharedTagDefs(sharedTagIds, tags),
+      }, { merge: true });
     } catch (e) {
       console.warn('updateSharedTagIds error:', e);
     }
-  }, [groupId]);
+  }, [groupId, tags]);
 
   // ── ログイン / ログアウト ─────────────────────────────────────────────────
   const login = async () => {
