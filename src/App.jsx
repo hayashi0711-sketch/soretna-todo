@@ -615,6 +615,11 @@ function SyncSettingsModal({ sync, onClose, theme }) {
             </>
           )}
 
+          {/* デバッグ表示（問題解決後に削除） */}
+          <p style={{ fontSize:10,color:t.sub,wordBreak:"break-all",marginBottom:8 }}>
+            user:{sync.user?.email||'none'} | loading:{String(sync.authLoading)} | group:{sync.groupId||'none'} | justLoggedIn:{String(sync.justLoggedIn)}
+          </p>
+
           {sync.authLoading && (
             <p style={{ fontSize:13,color:t.sub,textAlign:"center",padding:"12px 0" }}>確認中…</p>
           )}

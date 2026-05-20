@@ -35,7 +35,6 @@ export function useSync({ todos, setTodos, tags, setTags }) {
 
   // ── 認証状態の監視 ──────────────────────────────────────────────────────
   useEffect(() => {
-    // ITP対策: getRedirectResultではなくsessionStorageのフラグで検知
     getRedirectResult(auth).catch(() => {});
 
     return onAuthStateChanged(auth, u => {
@@ -44,10 +43,12 @@ export function useSync({ todos, setTodos, tags, setTags }) {
       if (u) {
         const saved = localStorage.getItem(LOCAL_KEY);
         if (saved) setGroupId(saved);
-        // リダイレクトログイン後フラグが残っていたらモーダル表示
-        if (sessionStorage.getItem('pendingRedirectLogin')) {
-          sessionStorage.removeItem('pendingRedirectLogin');
-          setJustLoggedIn(true);
+        // リダイレクトログイン後フラグ検知（localStorage + タイムスタンプ、5分有効）
+        const pending = localStorage.getItem('pendingRedirectLogin');
+        if (pending) {
+          const elapsed = Date.now() - parseInt(pending, 10);
+          if (elapsed < 5 * 60 * 1000) setJustLoggedIn(true);
+          localStorage.removeItem('pendingRedirectLogin');
         }
       } else {
         setGroupId(null);
@@ -224,14 +225,14 @@ export function useSync({ todos, setTodos, tags, setTags }) {
     try {
       const provider = new GoogleAuthProvider();
       if (isMobileOrSafari()) {
-        // リダイレクト後にモーダルを再表示するためフラグを保存
-        sessionStorage.setItem('pendingRedirectLogin', '1');
+        // リダイレクト後にモーダルを再表示するためフラグを保存（localStorage + タイムスタンプ）
+        localStorage.setItem('pendingRedirectLogin', Date.now().toString());
         await signInWithRedirect(auth, provider);
       } else {
         await signInWithPopup(auth, provider);
       }
     } catch (e) {
-      sessionStorage.removeItem('pendingRedirectLogin');
+      localStorage.removeItem('pendingRedirectLogin');
       console.warn('login error:', e);
       setLoginError(e.message || 'ログインに失敗しました');
     }
