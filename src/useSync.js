@@ -35,17 +35,8 @@ export function useSync({ todos, setTodos, tags, setTags }) {
 
   // ── 認証状態の監視 ──────────────────────────────────────────────────────
   useEffect(() => {
-    // リダイレクト方式でログインした場合の結果を受け取る
-    getRedirectResult(auth).then(result => {
-      if (result?.user) {
-        // リダイレクトログイン完了 → モーダルを再表示させるためフラグをセット
-        setJustLoggedIn(true);
-      }
-    }).catch(e => {
-      if (e.code !== 'auth/no-current-user') {
-        setLoginError(e.message || 'ログインに失敗しました');
-      }
-    });
+    // ITP対策: getRedirectResultではなくsessionStorageのフラグで検知
+    getRedirectResult(auth).catch(() => {});
 
     return onAuthStateChanged(auth, u => {
       setUser(u);
@@ -53,6 +44,11 @@ export function useSync({ todos, setTodos, tags, setTags }) {
       if (u) {
         const saved = localStorage.getItem(LOCAL_KEY);
         if (saved) setGroupId(saved);
+        // リダイレクトログイン後フラグが残っていたらモーダル表示
+        if (sessionStorage.getItem('pendingRedirectLogin')) {
+          sessionStorage.removeItem('pendingRedirectLogin');
+          setJustLoggedIn(true);
+        }
       } else {
         setGroupId(null);
         setGroupCode(null);
@@ -228,11 +224,14 @@ export function useSync({ todos, setTodos, tags, setTags }) {
     try {
       const provider = new GoogleAuthProvider();
       if (isMobileOrSafari()) {
+        // リダイレクト後にモーダルを再表示するためフラグを保存
+        sessionStorage.setItem('pendingRedirectLogin', '1');
         await signInWithRedirect(auth, provider);
       } else {
         await signInWithPopup(auth, provider);
       }
     } catch (e) {
+      sessionStorage.removeItem('pendingRedirectLogin');
       console.warn('login error:', e);
       setLoginError(e.message || 'ログインに失敗しました');
     }
