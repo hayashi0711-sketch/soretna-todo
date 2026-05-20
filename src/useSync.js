@@ -16,7 +16,7 @@ function randomCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
-export function useSync({ todos, setTodos, tags, setTags }) {
+export function useSync({ todos, setTodos, tags, setTags, sharedFixedTagIds = [], setSharedFixedTagIds }) {
   const [user,        setUser]        = useState(null);
   const [groupId,     setGroupId]     = useState(null);
   const [groupCode,   setGroupCode]   = useState(null);
@@ -53,9 +53,10 @@ export function useSync({ todos, setTodos, tags, setTags }) {
       // tags の shared フラグを更新
       const sharedIds = data.sharedTagIds || [];
       setTags(prev => prev.map(tg => ({ ...tg, shared: sharedIds.includes(tg.id) })));
+      setSharedFixedTagIds(['shopping', 'stock'].filter(id => sharedIds.includes(id)));
     });
     return unsub;
-  }, [groupId, setTags]);
+  }, [groupId, setTags, setSharedFixedTagIds]);
 
   // ── 共有タスクのリアルタイム監視 ────────────────────────────────────────
   useEffect(() => {
@@ -85,8 +86,8 @@ export function useSync({ todos, setTodos, tags, setTags }) {
 
   // ── helpers ──────────────────────────────────────────────────────────────
   const isSharedTag = useCallback((tagId) => {
-    return tags.some(tg => tg.id === tagId && tg.shared);
-  }, [tags]);
+    return tags.some(tg => tg.id === tagId && tg.shared) || sharedFixedTagIds.includes(tagId);
+  }, [tags, sharedFixedTagIds]);
 
   // ── Firestore への書き込み ────────────────────────────────────────────────
   const syncAddOrUpdate = useCallback(async (task) => {
@@ -118,19 +119,19 @@ export function useSync({ todos, setTodos, tags, setTags }) {
     if (!user) return;
     const code  = randomCode();
     const gId   = `${user.uid.slice(0, 8)}_${Date.now().toString(36)}`;
-    const sharedIds = tags.filter(tg => tg.shared).map(tg => tg.id);
+    const allSharedIds = [...sharedFixedTagIds, ...tags.filter(tg => tg.shared).map(tg => tg.id)];
 
     await setDoc(doc(db, 'groups', gId), {
       inviteCode:   code,
       memberUids:   [user.uid],
-      sharedTagIds: sharedIds,
+      sharedTagIds: allSharedIds,
       createdAt:    Date.now(),
     });
 
     // 既存の共有タグタスクを一括アップロード
     const batch = writeBatch(db);
     todos
-      .filter(td => sharedIds.includes(td.tagId))
+      .filter(td => allSharedIds.includes(td.tagId))
       .forEach(task => {
         batch.set(
           doc(db, 'groups', gId, 'tasks', String(task.id)),
@@ -143,7 +144,7 @@ export function useSync({ todos, setTodos, tags, setTags }) {
     setGroupId(gId);
     setGroupCode(code);
     return code;
-  }, [user, tags, todos]);
+  }, [user, tags, todos, sharedFixedTagIds]);
 
   // ── グループ参加 ──────────────────────────────────────────────────────────
   const joinGroup = useCallback(async (code) => {
@@ -192,7 +193,8 @@ export function useSync({ todos, setTodos, tags, setTags }) {
     setGroupCode(null);
     setMemberCount(0);
     setTags(prev => prev.map(tg => ({ ...tg, shared: false })));
-  }, [setTags]);
+    setSharedFixedTagIds([]);
+  }, [setTags, setSharedFixedTagIds]);
 
   // ── 共有タグIDをFirestoreに保存 ─────────────────────────────────────────
   const updateSharedTagIds = useCallback(async (sharedTagIds) => {

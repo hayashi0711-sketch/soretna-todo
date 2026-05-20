@@ -703,13 +703,23 @@ function TagEditorModal({ tags, onClose, onSave, syncInfo, theme }) {
           <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
         </div>
         <div style={{ maxHeight:260,overflowY:"auto",padding:"12px 16px" }}>
-          {fixedTags.map(tag => (
-            <div key={tag.id} style={{ display:"flex",alignItems:"center",gap:10,background:t.inputBg,borderRadius:10,padding:"10px 12px",border:`1px solid ${t.border}`,marginBottom:8,opacity:0.75 }}>
-              <div style={{ width:10,height:10,borderRadius:3,background:tag.color,flexShrink:0 }}/>
-              <span style={{ flex:1,fontSize:13,color:t.text }}>{tag.label}</span>
-              <span style={{ fontSize:10,color:t.sub,background:t.chipOff,borderRadius:5,padding:"2px 6px" }}>固定</span>
-            </div>
-          ))}
+          {fixedTags.map(tag => {
+            const isShared = syncInfo?.sharedFixedTagIds?.includes(tag.id);
+            return (
+              <div key={tag.id} style={{ display:"flex",alignItems:"center",gap:10,background:t.inputBg,borderRadius:10,padding:"10px 12px",border:`1px solid ${t.border}`,marginBottom:8 }}>
+                <div style={{ width:10,height:10,borderRadius:3,background:tag.color,flexShrink:0 }}/>
+                <span style={{ flex:1,fontSize:13,color:t.text }}>{tag.label}</span>
+                <span style={{ fontSize:10,color:t.sub,background:t.chipOff,borderRadius:5,padding:"2px 6px" }}>固定</span>
+                {syncInfo?.inGroup && (
+                  <button onClick={() => syncInfo.onToggleFixedShare?.(tag.id)}
+                    title={isShared ? "共有中（タップで解除）" : "共有する"}
+                    style={{ background:isShared?"rgba(124,106,247,0.2)":"transparent",border:"none",cursor:"pointer",color:isShared?"#a78bfa":t.subDim,padding:"4px 6px",borderRadius:6,fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:3,flexShrink:0 }}>
+                    🔗{isShared?"共有中":""}
+                  </button>
+                )}
+              </div>
+            );
+          })}
           {localTags.map(tag=>(
             <div key={tag.id} style={{ marginBottom:8 }}>
               {editingId===tag.id ? (
@@ -1223,10 +1233,19 @@ export default function TodoApp() {
   const t       = theme;
 
   // ── Sync ─────────────────────────────────────────────────────────────────
-  const sync = useSync({ todos, setTodos, tags, setTags });
+  const [sharedFixedTagIds, setSharedFixedTagIds] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sharedFixedTagIds') || '[]'); } catch { return []; }
+  });
+  useEffect(() => { localStorage.setItem('sharedFixedTagIds', JSON.stringify(sharedFixedTagIds)); }, [sharedFixedTagIds]);
+  const sync = useSync({ todos, setTodos, tags, setTags, sharedFixedTagIds, setSharedFixedTagIds });
   // 音声入力ハンドラ（stale closure対策）で使うref
   const sharedTagIdsRef = useRef([]);
-  useEffect(() => { sharedTagIdsRef.current = tags.filter(tg => tg.shared).map(tg => tg.id); }, [tags]);
+  useEffect(() => {
+    sharedTagIdsRef.current = [
+      ...sharedFixedTagIds,
+      ...tags.filter(tg => tg.shared).map(tg => tg.id),
+    ];
+  }, [tags, sharedFixedTagIds]);
   const syncRef = useRef(sync);
   useEffect(() => { syncRef.current = sync; }, [sync]);
 
@@ -1537,7 +1556,7 @@ export default function TodoApp() {
         input:focus,textarea:focus,select:focus{outline:none;}
       `}</style>
 
-      {showTagEd && <TagEditorModal tags={tags} onClose={() => setShowTagEd(false)} onSave={tgs => { setTags(tgs); setShowTagEd(false); }} syncInfo={{ inGroup: !!sync.groupId, updateSharedTagIds: sync.updateSharedTagIds }} theme={t}/>}
+      {showTagEd && <TagEditorModal tags={tags} onClose={() => setShowTagEd(false)} onSave={tgs => { setTags(tgs); setShowTagEd(false); }} syncInfo={{ inGroup: !!sync.groupId, updateSharedTagIds: (userSharedIds) => sync.updateSharedTagIds([...sharedFixedTagIds, ...userSharedIds]), sharedFixedTagIds, onToggleFixedShare: (tagId) => { setSharedFixedTagIds(prev => { const next = prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]; sync.updateSharedTagIds([...next, ...tags.filter(tg => tg.shared).map(tg => tg.id)]); return next; }); } }} theme={t}/>}
       {showSync  && <SyncSettingsModal sync={sync} onClose={() => setShowSync(false)} theme={t}/>}
       {editTodo  && <TodoDetailModal todo={editTodo} todos={todos} tags={tags} onClose={() => setEditTodo(null)} onSave={saveEdit} theme={t}/>}
       {showLocModal && userLoc && <LocationModal lat={userLoc.lat} lng={userLoc.lng} onClose={() => setShowLocModal(false)} theme={t}/>}
