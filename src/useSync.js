@@ -1,13 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   onAuthStateChanged, GoogleAuthProvider,
-  signInWithPopup, signInWithRedirect, getRedirectResult, signOut,
+  signInWithPopup, signOut,
 } from 'firebase/auth';
-
-// iOS Safari / WebView はポップアップ不可 → リダイレクト方式を使う
-const isMobileOrSafari = () =>
-  /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-  (/Safari/i.test(navigator.userAgent) && !/Chrome/i.test(navigator.userAgent));
 import {
   collection, doc, setDoc, deleteDoc,
   onSnapshot, query, where,
@@ -28,28 +23,18 @@ export function useSync({ todos, setTodos, tags, setTags }) {
   const [memberCount, setMemberCount] = useState(0);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginError,  setLoginError]  = useState(null);
-  const [justLoggedIn, setJustLoggedIn] = useState(false);
 
   // ローカルで書いた ID を記録して Firestore からの echo を無視する
   const localWriteIds = useRef(new Set());
 
   // ── 認証状態の監視 ──────────────────────────────────────────────────────
   useEffect(() => {
-    getRedirectResult(auth).catch(() => {});
-
     return onAuthStateChanged(auth, u => {
       setUser(u);
       setAuthLoading(false);
       if (u) {
         const saved = localStorage.getItem(LOCAL_KEY);
         if (saved) setGroupId(saved);
-        // リダイレクトログイン後フラグ検知（localStorage + タイムスタンプ、5分有効）
-        const pending = localStorage.getItem('pendingRedirectLogin');
-        if (pending) {
-          const elapsed = Date.now() - parseInt(pending, 10);
-          if (elapsed < 5 * 60 * 1000) setJustLoggedIn(true);
-          localStorage.removeItem('pendingRedirectLogin');
-        }
       } else {
         setGroupId(null);
         setGroupCode(null);
@@ -223,16 +208,8 @@ export function useSync({ todos, setTodos, tags, setTags }) {
   const login = async () => {
     setLoginError(null);
     try {
-      const provider = new GoogleAuthProvider();
-      if (isMobileOrSafari()) {
-        // リダイレクト後にモーダルを再表示するためフラグを保存（localStorage + タイムスタンプ）
-        localStorage.setItem('pendingRedirectLogin', Date.now().toString());
-        await signInWithRedirect(auth, provider);
-      } else {
-        await signInWithPopup(auth, provider);
-      }
+      await signInWithPopup(auth, new GoogleAuthProvider());
     } catch (e) {
-      localStorage.removeItem('pendingRedirectLogin');
       console.warn('login error:', e);
       setLoginError(e.message || 'ログインに失敗しました');
     }
@@ -240,7 +217,7 @@ export function useSync({ todos, setTodos, tags, setTags }) {
   const logout = async () => { await signOut(auth); leaveGroup(); };
 
   return {
-    user, groupId, groupCode, memberCount, authLoading, loginError, justLoggedIn,
+    user, groupId, groupCode, memberCount, authLoading, loginError,
     isSharedTag, syncAddOrUpdate, syncDelete,
     createGroup, joinGroup, leaveGroup, updateSharedTagIds,
     login, logout,

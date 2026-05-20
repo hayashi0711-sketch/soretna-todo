@@ -615,11 +615,6 @@ function SyncSettingsModal({ sync, onClose, theme }) {
             </>
           )}
 
-          {/* デバッグ表示（問題解決後に削除） */}
-          <p style={{ fontSize:10,color:t.sub,wordBreak:"break-all",marginBottom:8 }}>
-            user:{sync.user?.email||'none'} | loading:{String(sync.authLoading)} | group:{sync.groupId||'none'} | justLoggedIn:{String(sync.justLoggedIn)}
-          </p>
-
           {sync.authLoading && (
             <p style={{ fontSize:13,color:t.sub,textAlign:"center",padding:"12px 0" }}>確認中…</p>
           )}
@@ -1229,8 +1224,6 @@ export default function TodoApp() {
 
   // ── Sync ─────────────────────────────────────────────────────────────────
   const sync = useSync({ todos, setTodos, tags, setTags });
-  // リダイレクトログイン完了後にモーダルを自動表示
-  useEffect(() => { if (sync.justLoggedIn) setShowSync(true); }, [sync.justLoggedIn]);
   // 音声入力ハンドラ（stale closure対策）で使うref
   const sharedTagIdsRef = useRef([]);
   useEffect(() => { sharedTagIdsRef.current = tags.filter(tg => tg.shared).map(tg => tg.id); }, [tags]);
