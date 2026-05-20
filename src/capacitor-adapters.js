@@ -94,16 +94,16 @@ export async function requestSpeechPermission() {
   return true; // Web Speech API requires no explicit permission request
 }
 
-export function startListening({ onResult, onInterim, onEnd, onError }) {
-  return startWebSpeech({ onResult, onInterim, onEnd, onError });
+export function startListening({ onResult, onInterim, onEnd, onError, continuous = true }) {
+  return startWebSpeech({ onResult, onInterim, onEnd, onError, continuous });
 }
 
-function startWebSpeech({ onResult, onInterim, onEnd, onError }) {
+function startWebSpeech({ onResult, onInterim, onEnd, onError, continuous }) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { onError?.('unsupported'); onEnd?.(); return () => {}; }
   const r = new SR();
   r.lang = 'ja-JP';
-  r.continuous = true;
+  r.continuous = continuous;
   r.interimResults = true;
   // Android Chrome が同一 final 結果を複数回発火することがあるため処理済みインデックスを追跡
   let lastFinalIndex = -1;

@@ -814,6 +814,7 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
       onInterim: txt => setMemoInterim(txt),
       onEnd:     () => { setMemoListening(false); setMemoInterim(""); },
       onError:   () => { setMemoListening(false); setMemoInterim(""); },
+      continuous: false, // メモは1発話で十分。continousはAndroid Chromeで2重入力の原因になる
     });
   };
 
