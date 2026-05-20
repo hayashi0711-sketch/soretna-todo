@@ -28,6 +28,7 @@ export function useSync({ todos, setTodos, tags, setTags }) {
   const [memberCount, setMemberCount] = useState(0);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginError,  setLoginError]  = useState(null);
+  const [justLoggedIn, setJustLoggedIn] = useState(false);
 
   // ローカルで書いた ID を記録して Firestore からの echo を無視する
   const localWriteIds = useRef(new Set());
@@ -35,7 +36,12 @@ export function useSync({ todos, setTodos, tags, setTags }) {
   // ── 認証状態の監視 ──────────────────────────────────────────────────────
   useEffect(() => {
     // リダイレクト方式でログインした場合の結果を受け取る
-    getRedirectResult(auth).catch(e => {
+    getRedirectResult(auth).then(result => {
+      if (result?.user) {
+        // リダイレクトログイン完了 → モーダルを再表示させるためフラグをセット
+        setJustLoggedIn(true);
+      }
+    }).catch(e => {
       if (e.code !== 'auth/no-current-user') {
         setLoginError(e.message || 'ログインに失敗しました');
       }
@@ -234,7 +240,7 @@ export function useSync({ todos, setTodos, tags, setTags }) {
   const logout = async () => { await signOut(auth); leaveGroup(); };
 
   return {
-    user, groupId, groupCode, memberCount, authLoading, loginError,
+    user, groupId, groupCode, memberCount, authLoading, loginError, justLoggedIn,
     isSharedTag, syncAddOrUpdate, syncDelete,
     createGroup, joinGroup, leaveGroup, updateSharedTagIds,
     login, logout,

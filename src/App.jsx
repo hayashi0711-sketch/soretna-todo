@@ -1224,6 +1224,8 @@ export default function TodoApp() {
 
   // ── Sync ─────────────────────────────────────────────────────────────────
   const sync = useSync({ todos, setTodos, tags, setTags });
+  // リダイレクトログイン完了後にモーダルを自動表示
+  useEffect(() => { if (sync.justLoggedIn) setShowSync(true); }, [sync.justLoggedIn]);
   // 音声入力ハンドラ（stale closure対策）で使うref
   const sharedTagIdsRef = useRef([]);
   useEffect(() => { sharedTagIdsRef.current = tags.filter(tg => tg.shared).map(tg => tg.id); }, [tags]);
