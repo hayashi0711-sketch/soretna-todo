@@ -27,6 +27,7 @@ export function useSync({ todos, setTodos, tags, setTags }) {
   const [groupCode,   setGroupCode]   = useState(null);
   const [memberCount, setMemberCount] = useState(0);
   const [authLoading, setAuthLoading] = useState(true);
+  const [loginError,  setLoginError]  = useState(null);
 
   // ローカルで書いた ID を記録して Firestore からの echo を無視する
   const localWriteIds = useRef(new Set());
@@ -34,7 +35,11 @@ export function useSync({ todos, setTodos, tags, setTags }) {
   // ── 認証状態の監視 ──────────────────────────────────────────────────────
   useEffect(() => {
     // リダイレクト方式でログインした場合の結果を受け取る
-    getRedirectResult(auth).catch(() => {});
+    getRedirectResult(auth).catch(e => {
+      if (e.code !== 'auth/no-current-user') {
+        setLoginError(e.message || 'ログインに失敗しました');
+      }
+    });
 
     return onAuthStateChanged(auth, u => {
       setUser(u);
@@ -212,15 +217,24 @@ export function useSync({ todos, setTodos, tags, setTags }) {
   }, [groupId]);
 
   // ── ログイン / ログアウト ─────────────────────────────────────────────────
-  const login = () => {
-    const provider = new GoogleAuthProvider();
-    if (isMobileOrSafari()) return signInWithRedirect(auth, provider);
-    return signInWithPopup(auth, provider);
+  const login = async () => {
+    setLoginError(null);
+    try {
+      const provider = new GoogleAuthProvider();
+      if (isMobileOrSafari()) {
+        await signInWithRedirect(auth, provider);
+      } else {
+        await signInWithPopup(auth, provider);
+      }
+    } catch (e) {
+      console.warn('login error:', e);
+      setLoginError(e.message || 'ログインに失敗しました');
+    }
   };
   const logout = async () => { await signOut(auth); leaveGroup(); };
 
   return {
-    user, groupId, groupCode, memberCount, authLoading,
+    user, groupId, groupCode, memberCount, authLoading, loginError,
     isSharedTag, syncAddOrUpdate, syncDelete,
     createGroup, joinGroup, leaveGroup, updateSharedTagIds,
     login, logout,

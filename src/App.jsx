@@ -607,6 +607,11 @@ function SyncSettingsModal({ sync, onClose, theme }) {
               <button style={btn("linear-gradient(135deg,#4285f4,#34a853)")} onClick={sync.login}>
                 Googleでログイン
               </button>
+              {sync.loginError && (
+                <p style={{ fontSize:12,color:"#e53935",marginTop:10,lineHeight:1.5,wordBreak:"break-all" }}>
+                  ⚠ {sync.loginError}
+                </p>
+              )}
             </>
           )}
 
