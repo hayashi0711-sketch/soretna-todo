@@ -1,8 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   onAuthStateChanged, GoogleAuthProvider,
-  signInWithPopup, signOut,
+  signInWithPopup, signInWithRedirect, getRedirectResult, signOut,
 } from 'firebase/auth';
+
+// iOS Safari / WebView はポップアップ不可 → リダイレクト方式を使う
+const isMobileOrSafari = () =>
+  /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+  (/Safari/i.test(navigator.userAgent) && !/Chrome/i.test(navigator.userAgent));
 import {
   collection, doc, setDoc, deleteDoc,
   onSnapshot, query, where,
@@ -28,6 +33,9 @@ export function useSync({ todos, setTodos, tags, setTags }) {
 
   // ── 認証状態の監視 ──────────────────────────────────────────────────────
   useEffect(() => {
+    // リダイレクト方式でログインした場合の結果を受け取る
+    getRedirectResult(auth).catch(() => {});
+
     return onAuthStateChanged(auth, u => {
       setUser(u);
       setAuthLoading(false);
@@ -204,7 +212,11 @@ export function useSync({ todos, setTodos, tags, setTags }) {
   }, [groupId]);
 
   // ── ログイン / ログアウト ─────────────────────────────────────────────────
-  const login  = ()       => signInWithPopup(auth, new GoogleAuthProvider());
+  const login = () => {
+    const provider = new GoogleAuthProvider();
+    if (isMobileOrSafari()) return signInWithRedirect(auth, provider);
+    return signInWithPopup(auth, provider);
+  };
   const logout = async () => { await signOut(auth); leaveGroup(); };
 
   return {
