@@ -105,12 +105,17 @@ function startWebSpeech({ onResult, onInterim, onEnd, onError }) {
   r.lang = 'ja-JP';
   r.continuous = true;
   r.interimResults = true;
+  // Android Chrome が同一 final 結果を複数回発火することがあるため処理済みインデックスを追跡
+  let lastFinalIndex = -1;
   r.onresult = e => {
     let final = '';
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
       if (e.results[i].isFinal) {
-        final += e.results[i][0].transcript;
+        if (i > lastFinalIndex) {
+          final += e.results[i][0].transcript;
+          lastFinalIndex = i;
+        }
       } else {
         interim += e.results[i][0].transcript;
       }

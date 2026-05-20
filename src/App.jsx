@@ -1340,7 +1340,7 @@ export default function TodoApp() {
     return () => clearInterval(notifTimer.current);
   }, [todos]);
 
-  // ── Voice input with 2-second silence auto-add ────────────────────────────
+  // ── Voice input with silence auto-add ────────────────────────────────────
   const toggleVoice = useCallback(async () => {
     if (listening) {
       stopVoice.current?.();
@@ -1351,6 +1351,31 @@ export default function TodoApp() {
     }
     await haptics.light();
     setListening(true);
+
+    // 追加済みフラグ（タイマーと onEnd の二重追加防止）
+    let added = false;
+    const performAdd = () => {
+      if (added) return;
+      const txt = inputValueRef.current.trim();
+      const tag = selectedTagRef.current;
+      if (!txt || !tag) return;
+      added = true;
+      const isShared = sharedTagIdsRef.current.includes(tag);
+      const newTodo = {
+        id: isShared ? uid() : nextId.current++,
+        text: txt, done: false,
+        tagId: tag, priority: priorityRef.current || "none",
+        deadline: deadlineRef.current, repeat: repeatRef.current,
+        createdAt: Date.now(), price: null, memo: null, storePrices: [],
+      };
+      setTodos(prev => [newTodo, ...prev]);
+      syncRef.current.syncAddOrUpdate(newTodo);
+      setInput(""); inputValueRef.current = "";
+      setDeadline(null); setPriority("none"); setRepeat(null);
+      setShowCal(false); setShowRepeat(false);
+      haptics.success();
+    };
+
     stopVoice.current = startListening({
       onResult: text => {
         setInput(prev => {
@@ -1361,32 +1386,21 @@ export default function TodoApp() {
         setInterimText("");
         clearTimeout(voiceSilenceTimer.current);
         voiceSilenceTimer.current = setTimeout(() => {
-          const txt = inputValueRef.current.trim();
-          const tag = selectedTagRef.current;
-          if (txt && tag) {
-            const isShared = sharedTagIdsRef.current.includes(tag);
-            const newTodo = {
-              id: isShared ? uid() : nextId.current++,
-              text: txt, done: false,
-              tagId: tag, priority: priorityRef.current || "none",
-              deadline: deadlineRef.current, repeat: repeatRef.current,
-              createdAt: Date.now(), price: null, memo: null, storePrices: [],
-            };
-            setTodos(prev => [newTodo, ...prev]);
-            syncRef.current.syncAddOrUpdate(newTodo);
-            setInput(""); inputValueRef.current = "";
-            setDeadline(null); setPriority("none"); setRepeat(null);
-            setShowCal(false); setShowRepeat(false);
-            haptics.success();
-          }
+          performAdd();
           stopVoice.current?.();
           setListening(false);
           setInterimText("");
-        }, 1000);
+        }, 1500);
       },
       onInterim: text => setInterimText(text),
-      onEnd:     () => { clearTimeout(voiceSilenceTimer.current); setListening(false); setInterimText(""); },
-      onError:   e  => {
+      // Android Chrome は continuous:true でも onend を早期発火するため、ここでも追加を試みる
+      onEnd: () => {
+        clearTimeout(voiceSilenceTimer.current);
+        performAdd();
+        setListening(false);
+        setInterimText("");
+      },
+      onError: e => {
         clearTimeout(voiceSilenceTimer.current);
         setListening(false);
         setInterimText("");
