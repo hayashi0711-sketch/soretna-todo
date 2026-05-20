@@ -1,5 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { storage, haptics, requestNotificationPermission, scheduleDeadlineNotification, cancelNotification, requestSpeechPermission, startListening, addKeyboardListeners, addBackButtonListener } from "./capacitor-adapters";
+import { useSync } from "./useSync";
+
+// タスクに一意な文字列IDを生成（デバイス間衝突回避）
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PRESET_COLORS = ["#f87171","#fb923c","#fbbf24","#a3e635","#34d399","#22d3ee","#60a5fa","#a78bfa","#f472b6","#e2e8f0"];
@@ -553,8 +557,122 @@ function RepeatPicker({ value, onChange, theme }) {
   );
 }
 
+// ─── Sync Settings Modal ───────────────────────────────────────────────────────
+function SyncSettingsModal({ sync, onClose, theme }) {
+  const t = theme;
+  const [view,      setView]      = useState("top");   // top | join
+  const [joinCode,  setJoinCode]  = useState("");
+  const [joinState, setJoinState] = useState(null);    // null | loading | ok | notFound | error
+  const [copied,    setCopied]    = useState(false);
+
+  const handleCreate = async () => {
+    setView("creating");
+    await sync.createGroup();
+    setView("top");
+  };
+
+  const handleJoin = async () => {
+    if (!joinCode.trim()) return;
+    setJoinState("loading");
+    const result = await sync.joinGroup(joinCode);
+    setJoinState(result);
+    if (result === "ok") setTimeout(() => { setView("top"); setJoinState(null); }, 1200);
+  };
+
+  const copyCode = () => {
+    navigator.clipboard?.writeText(sync.groupCode || "").then(() => {
+      setCopied(true); setTimeout(() => setCopied(false), 1800);
+    });
+  };
+
+  const overlay = { position:"fixed",inset:0,zIndex:300,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 };
+  const card    = { background:t.card,borderRadius:20,width:"100%",maxWidth:340,boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}` };
+  const btn     = (grad) => ({ width:"100%",border:"none",borderRadius:11,color:"#fff",fontSize:13,fontWeight:700,padding:"12px 0",cursor:"pointer",fontFamily:"inherit",background:grad,marginBottom:8 });
+  const subBtn  = { width:"100%",border:"none",borderRadius:11,color:t.sub,fontSize:13,padding:"11px 0",cursor:"pointer",fontFamily:"inherit",background:t.chipOff };
+
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div style={card} onClick={e=>e.stopPropagation()}>
+        {/* ヘッダー */}
+        <div style={{ padding:"16px 18px 12px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+          <span style={{ fontSize:15,fontWeight:700,color:t.text }}>🔗 デバイス間同期</span>
+          <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
+        </div>
+
+        <div style={{ padding:"16px 18px 18px" }}>
+          {/* ── 未ログイン ── */}
+          {!sync.user && !sync.authLoading && (
+            <>
+              <p style={{ fontSize:13,color:t.sub,marginBottom:16,lineHeight:1.6 }}>Googleアカウントでログインすると、家族や友人とタスクをリアルタイムで共有できます。</p>
+              <button style={btn("linear-gradient(135deg,#4285f4,#34a853)")} onClick={sync.login}>
+                Googleでログイン
+              </button>
+            </>
+          )}
+
+          {sync.authLoading && (
+            <p style={{ fontSize:13,color:t.sub,textAlign:"center",padding:"12px 0" }}>確認中…</p>
+          )}
+
+          {/* ── ログイン済・グループなし ── */}
+          {sync.user && !sync.groupId && view === "top" && (
+            <>
+              <p style={{ fontSize:12,color:t.sub,marginBottom:14 }}>✅ {sync.user.displayName || sync.user.email}</p>
+              <p style={{ fontSize:13,color:t.sub,marginBottom:16,lineHeight:1.6 }}>共有グループを作成するか、招待コードで既存グループに参加してください。</p>
+              <button style={btn("linear-gradient(135deg,#7c6af7,#a78bfa)")} onClick={handleCreate}>グループを作成する</button>
+              <button style={btn("linear-gradient(135deg,#22d3ee,#60a5fa)")} onClick={()=>setView("join")}>招待コードで参加</button>
+              <button style={subBtn} onClick={sync.logout}>ログアウト</button>
+            </>
+          )}
+
+          {/* ── グループ作成中 ── */}
+          {view === "creating" && (
+            <p style={{ fontSize:13,color:t.sub,textAlign:"center",padding:"12px 0" }}>グループを作成中…</p>
+          )}
+
+          {/* ── 招待コード入力 ── */}
+          {sync.user && !sync.groupId && view === "join" && (
+            <>
+              <p style={{ fontSize:13,color:t.sub,marginBottom:12 }}>招待コードを入力してください。</p>
+              <input
+                value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())}
+                placeholder="例: ABC123"
+                maxLength={8}
+                style={{ width:"100%",background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:10,padding:"10px 14px",color:t.text,fontSize:16,fontFamily:"'Space Mono',monospace",letterSpacing:3,marginBottom:10,outline:"none",boxSizing:"border-box" }}
+              />
+              {joinState === "notFound" && <p style={{ fontSize:12,color:"#f87171",marginBottom:8 }}>コードが見つかりませんでした。</p>}
+              {joinState === "error"    && <p style={{ fontSize:12,color:"#f87171",marginBottom:8 }}>エラーが発生しました。</p>}
+              {joinState === "ok"       && <p style={{ fontSize:12,color:"#34d399",marginBottom:8 }}>参加しました！</p>}
+              <button style={btn("linear-gradient(135deg,#22d3ee,#60a5fa)")} onClick={handleJoin} disabled={joinState==="loading"}>
+                {joinState === "loading" ? "参加中…" : "参加する"}
+              </button>
+              <button style={subBtn} onClick={()=>{ setView("top"); setJoinState(null); }}>戻る</button>
+            </>
+          )}
+
+          {/* ── グループ参加済 ── */}
+          {sync.user && sync.groupId && (
+            <>
+              <p style={{ fontSize:12,color:t.sub,marginBottom:6 }}>✅ {sync.user.displayName || sync.user.email}</p>
+              <p style={{ fontSize:12,color:t.sub,marginBottom:14 }}>👥 メンバー {sync.memberCount}人</p>
+              <div style={{ background:t.inputBg,border:`1px solid ${t.border}`,borderRadius:12,padding:"12px 16px",marginBottom:14,textAlign:"center" }}>
+                <div style={{ fontSize:11,color:t.subDim,marginBottom:4 }}>招待コード（家族に共有）</div>
+                <div style={{ fontFamily:"'Space Mono',monospace",fontSize:24,fontWeight:700,color:"#a78bfa",letterSpacing:4 }}>{sync.groupCode}</div>
+              </div>
+              <button style={btn(copied ? "linear-gradient(135deg,#34d399,#22d3ee)" : "linear-gradient(135deg,#7c6af7,#a78bfa)")} onClick={copyCode}>
+                {copied ? "コピーしました！" : "招待コードをコピー"}
+              </button>
+              <button style={subBtn} onClick={()=>{ sync.leaveGroup(); onClose(); }}>グループを退出</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Tag Editor Modal ──────────────────────────────────────────────────────────
-function TagEditorModal({ tags, onClose, onSave, theme }) {
+function TagEditorModal({ tags, onClose, onSave, syncInfo, theme }) {
   const [localTags, setLocalTags] = useState(tags.map(t=>({...t})));
   const [newLabel,  setNewLabel]  = useState("");
   const [newColor,  setNewColor]  = useState(PRESET_COLORS[6]);
@@ -564,9 +682,14 @@ function TagEditorModal({ tags, onClose, onSave, theme }) {
   const nid = useRef(Date.now());
   const t = theme;
   const fixedTags = FIXED_TAGS;
-  const addTag  = () => { if(!newLabel.trim()) return; setLocalTags(p=>[...p,{id:`tag_${nid.current++}`,label:newLabel.trim(),color:newColor}]); setNewLabel(""); };
+  const addTag  = () => { if(!newLabel.trim()) return; setLocalTags(p=>[...p,{id:`tag_${nid.current++}`,label:newLabel.trim(),color:newColor,shared:false}]); setNewLabel(""); };
   const startEdit = tag => { setEditingId(tag.id); setEditLabel(tag.label); setEditColor(tag.color); };
   const saveEdit  = () => { if(!editLabel.trim()) return; setLocalTags(p=>p.map(x=>x.id===editingId?{...x,label:editLabel.trim(),color:editColor}:x)); setEditingId(null); };
+  const toggleShare = (tagId) => {
+    const next = localTags.map(x => x.id===tagId ? { ...x, shared: !x.shared } : x);
+    setLocalTags(next);
+    syncInfo?.updateSharedTagIds?.(next.filter(x=>x.shared).map(x=>x.id));
+  };
   return (
     <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
       <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:360,boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}` }} onClick={e=>e.stopPropagation()}>
@@ -599,6 +722,13 @@ function TagEditorModal({ tags, onClose, onSave, theme }) {
                 <div style={{ display:"flex",alignItems:"center",gap:10,background:t.inputBg,borderRadius:10,padding:"10px 12px",border:`1px solid ${t.border}` }}>
                   <div style={{ width:10,height:10,borderRadius:3,background:tag.color,flexShrink:0 }}/>
                   <span style={{ flex:1,fontSize:13,color:t.text }}>{tag.label}</span>
+                  {syncInfo?.inGroup && (
+                    <button onClick={()=>toggleShare(tag.id)}
+                      title={tag.shared ? "共有中（タップで解除）" : "共有する"}
+                      style={{ background:tag.shared?"rgba(124,106,247,0.2)":"transparent",border:"none",cursor:"pointer",color:tag.shared?"#a78bfa":t.subDim,padding:"4px 6px",borderRadius:6,fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:3,flexShrink:0 }}>
+                      🔗{tag.shared?"共有中":""}
+                    </button>
+                  )}
                   <button onClick={()=>startEdit(tag)} style={{ background:"transparent",border:"none",cursor:"pointer",color:t.sub,padding:4,borderRadius:6,display:"flex" }}><EditIcon/></button>
                   <button onClick={()=>setLocalTags(p=>p.filter(x=>x.id!==tag.id))} style={{ background:"transparent",border:"none",cursor:"pointer",color:t.sub,padding:4,borderRadius:6,display:"flex" }}><TrashIcon size={13}/></button>
                 </div>
@@ -1067,6 +1197,7 @@ export default function TodoApp() {
   const [locLoading,  setLocLoading]  = useState(false);
   const [showLocModal,setShowLocModal]= useState(false);
   const [showRecipe,    setShowRecipe]    = useState(false);
+  const [showSync,      setShowSync]      = useState(false);
   const inputRef    = useRef(null);
   const nextId      = useRef(10);
   const stopVoice   = useRef(null);
@@ -1085,6 +1216,14 @@ export default function TodoApp() {
   const theme   = THEMES.find(t => t.id === themeId) || THEMES[0];
   const isLight = theme.isLight;
   const t       = theme;
+
+  // ── Sync ─────────────────────────────────────────────────────────────────
+  const sync = useSync({ todos, setTodos, tags, setTags });
+  // 音声入力ハンドラ（stale closure対策）で使うref
+  const sharedTagIdsRef = useRef([]);
+  useEffect(() => { sharedTagIdsRef.current = tags.filter(tg => tg.shared).map(tg => tg.id); }, [tags]);
+  const syncRef = useRef(sync);
+  useEffect(() => { syncRef.current = sync; }, [sync]);
 
   // Keep refs updated
   useEffect(() => { inputValueRef.current = input; }, [input]);
@@ -1201,12 +1340,16 @@ export default function TodoApp() {
           const txt = inputValueRef.current.trim();
           const tag = selectedTagRef.current;
           if (txt && tag) {
-            setTodos(prev => [{
-              id: nextId.current++, text: txt, done: false,
+            const isShared = sharedTagIdsRef.current.includes(tag);
+            const newTodo = {
+              id: isShared ? uid() : nextId.current++,
+              text: txt, done: false,
               tagId: tag, priority: priorityRef.current || "none",
               deadline: deadlineRef.current, repeat: repeatRef.current,
               createdAt: Date.now(), price: null, memo: null, storePrices: [],
-            }, ...prev]);
+            };
+            setTodos(prev => [newTodo, ...prev]);
+            syncRef.current.syncAddOrUpdate(newTodo);
             setInput(""); inputValueRef.current = "";
             setDeadline(null); setPriority("none"); setRepeat(null);
             setShowCal(false); setShowRepeat(false);
@@ -1269,14 +1412,17 @@ export default function TodoApp() {
     const text = input.trim();
     if (!text || !selectedTag) return;
     await haptics.light();
-    setTodos(prev => [{
-      id: nextId.current++, text, done: false,
+    const newTodo = {
+      id: sync.isSharedTag(selectedTag) ? uid() : nextId.current++,
+      text, done: false,
       tagId: selectedTag, priority, deadline, repeat, createdAt: Date.now(),
       price: null, memo: null, storePrices: [],
-    }, ...prev]);
+    };
+    setTodos(prev => [newTodo, ...prev]);
+    sync.syncAddOrUpdate(newTodo);
     setInput(""); setDeadline(null); setPriority("none"); setRepeat(null); setShowCal(false); setShowRepeat(false);
     inputRef.current?.focus();
-  }, [input, selectedTag, priority, deadline, repeat]);
+  }, [input, selectedTag, priority, deadline, repeat, sync]);
 
   const toggleTodo = async id => {
     const todo = todos.find(td => td.id === id);
@@ -1288,15 +1434,20 @@ export default function TodoApp() {
       const nextDeadline = calcNextDeadline(todo.repeat, todo.deadline || Date.now());
       const nextTodo = {
         ...todo,
-        id: nextId.current++,
+        id: sync.isSharedTag(todo.tagId) ? uid() : nextId.current++,
         done: false,
         deadline: nextDeadline,
         createdAt: Date.now(),
         nextAppearAt: nextDeadline,
       };
-      setTodos(prev => [nextTodo, ...prev.map(td => td.id === id ? { ...td, done: true, completedAt: Date.now() } : td)]);
+      const updated = { ...todo, done: true, completedAt: Date.now() };
+      setTodos(prev => [nextTodo, ...prev.map(td => td.id === id ? updated : td)]);
+      sync.syncAddOrUpdate(nextTodo);
+      sync.syncAddOrUpdate(updated);
     } else {
-      setTodos(prev => prev.map(td => td.id === id ? { ...td, done: !td.done, completedAt: !td.done ? Date.now() : null } : td));
+      const updated = { ...todo, done: !todo.done, completedAt: !todo.done ? Date.now() : null };
+      setTodos(prev => prev.map(td => td.id === id ? updated : td));
+      sync.syncAddOrUpdate(updated);
     }
   };
 
@@ -1304,11 +1455,13 @@ export default function TodoApp() {
     await haptics.medium();
     if (notifMap.current[id]) { await cancelNotification(notifMap.current[id]); delete notifMap.current[id]; }
     setTodos(prev => prev.filter(td => td.id !== id));
+    sync.syncDelete(id);
   };
 
   const saveEdit = async updated => {
     await haptics.success();
     setTodos(prev => prev.map(td => td.id === updated.id ? updated : td));
+    sync.syncAddOrUpdate(updated);
     setEditTodo(null);
   };
 
@@ -1379,7 +1532,8 @@ export default function TodoApp() {
         input:focus,textarea:focus,select:focus{outline:none;}
       `}</style>
 
-      {showTagEd && <TagEditorModal tags={tags} onClose={() => setShowTagEd(false)} onSave={tgs => { setTags(tgs); setShowTagEd(false); }} theme={t}/>}
+      {showTagEd && <TagEditorModal tags={tags} onClose={() => setShowTagEd(false)} onSave={tgs => { setTags(tgs); setShowTagEd(false); }} syncInfo={{ inGroup: !!sync.groupId, updateSharedTagIds: sync.updateSharedTagIds }} theme={t}/>}
+      {showSync  && <SyncSettingsModal sync={sync} onClose={() => setShowSync(false)} theme={t}/>}
       {editTodo  && <TodoDetailModal todo={editTodo} todos={todos} tags={tags} onClose={() => setEditTodo(null)} onSave={saveEdit} theme={t}/>}
       {showLocModal && userLoc && <LocationModal lat={userLoc.lat} lng={userLoc.lng} onClose={() => setShowLocModal(false)} theme={t}/>}
       {showRecipe && <RecipeModal todos={todos} onClose={() => setShowRecipe(false)} theme={t}/>}
@@ -1417,8 +1571,13 @@ export default function TodoApp() {
               {locLoading ? "⌛" : "🏷️"}<span style={{whiteSpace:"nowrap"}}>周辺お買得情報</span>
             </button>
           </div>
-          {/* Row 2: theme switcher */}
-          <div style={{ display:"flex", justifyContent:"flex-end" }}>
+          {/* Row 2: theme switcher + sync button */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <button onClick={() => setShowSync(true)}
+              title="デバイス間同期"
+              style={{ background: sync.groupId ? "linear-gradient(135deg,#7c6af7,#a78bfa)" : t.chipOff, border:"none", borderRadius:9, color: sync.groupId ? "#fff" : t.sub, padding:"5px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, cursor:"pointer" }}>
+              🔗<span style={{whiteSpace:"nowrap"}}>{sync.groupId ? "同期中" : "同期"}</span>
+            </button>
             <ThemeSwitcher currentThemeId={themeId} onChange={setThemeId} size={22}/>
           </div>
         </div>
