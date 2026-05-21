@@ -1250,29 +1250,41 @@ function RecipeModal({ todos, onClose, theme }) {
 }
 
 // ─── Messages Modal ───────────────────────────────────────────────────────────
+// URL と改行を処理してレンダリング
 function renderWithLinks(text) {
-  const parts = text.split(/(https?:\/\/[^\s]+)/g);
-  return parts.map((part, i) =>
-    /^https?:\/\//.test(part)
-      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color:"#60a5fa",textDecoration:"underline",wordBreak:"break-all" }}>{part}</a>
-      : <span key={i}>{part}</span>
-  );
+  return text.split('\n').map((line, lineIdx) => {
+    const parts = line.split(/(https?:\/\/[^\s]+)/g);
+    return (
+      <span key={lineIdx}>
+        {lineIdx > 0 && <br/>}
+        {parts.map((part, i) =>
+          /^https?:\/\//.test(part)
+            ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color:"#60a5fa",textDecoration:"underline",wordBreak:"break-all" }}>{part}</a>
+            : part
+        )}
+      </span>
+    );
+  });
 }
 
-function MessagesModal({ sync, userName, onClose, theme }) {
+function MessagesModal({ sync, userName, characterId, onClose, theme }) {
   const [msgInput, setMsgInput] = useState("");
   const messagesEndRef = useRef(null);
   const t = theme;
 
+  // モーダルを開いた瞬間に既読マーク
   useEffect(() => { sync.markAsRead?.(); }, []);
 
+  // 新メッセージ到着時に最下部へスクロール
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior:"smooth" });
   }, [sync.messages]);
 
+  const myEmoji = CHARACTERS.find(c => c.id === characterId)?.emoji || '🐱';
+
   const handleSend = async () => {
     if (!msgInput.trim()) return;
-    await sync.sendMessage(msgInput, userName || "ユーザー");
+    await sync.sendMessage(msgInput, userName || "ユーザー", myEmoji);
     setMsgInput("");
   };
 
@@ -1283,6 +1295,14 @@ function MessagesModal({ sync, userName, onClose, theme }) {
 
   const isOwn = (m) => sync.user && m.senderUid === sync.user.uid;
 
+  // 自分が送ったメッセージの既読人数（自分以外で lastReadAt >= message.createdAt）
+  const getReadCount = (message) => {
+    if (!sync.readStatuses || !sync.user || !isOwn(message)) return 0;
+    return Object.entries(sync.readStatuses)
+      .filter(([uid, lastRead]) => uid !== sync.user.uid && lastRead >= message.createdAt)
+      .length;
+  };
+
   return (
     <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
       <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:400,maxHeight:"80vh",boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}`,display:"flex",flexDirection:"column" }} onClick={e=>e.stopPropagation()}>
@@ -1290,35 +1310,73 @@ function MessagesModal({ sync, userName, onClose, theme }) {
           <span style={{ fontSize:15,fontWeight:700,color:t.text }}>🔔 グループ通知</span>
           <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
         </div>
-        <div style={{ flex:1,overflowY:"auto",padding:"12px 16px",display:"flex",flexDirection:"column",gap:8,minHeight:0 }}>
+
+        {/* メッセージ一覧 */}
+        <div style={{ flex:1,overflowY:"auto",padding:"12px 14px",display:"flex",flexDirection:"column",gap:10,minHeight:0 }}>
           {(!sync.messages || sync.messages.length === 0) && (
             <div style={{ textAlign:"center",color:t.subDim,fontSize:13,padding:"24px 0" }}>まだメッセージがありません</div>
           )}
-          {sync.messages?.map(m => (
-            <div key={m.id} style={{ display:"flex",flexDirection:"column",alignItems:isOwn(m)?"flex-end":"flex-start" }}>
-              <div style={{ fontSize:11,color:t.subDim,marginBottom:2,display:"flex",gap:4,alignItems:"center" }}>
-                {!isOwn(m) && <span style={{ fontWeight:700,color:t.sub }}>{m.senderName}</span>}
-                <span>{fmtTime(m.createdAt)}</span>
+          {sync.messages?.map(m => {
+            const own = isOwn(m);
+            const readCount = getReadCount(m);
+            const avatar = m.senderEmoji || (own ? myEmoji : '🐱');
+            return (
+              <div key={m.id} style={{ display:"flex",gap:7,alignItems:"flex-end",justifyContent:own?"flex-end":"flex-start" }}>
+                {/* 受信：左側にアバター */}
+                {!own && (
+                  <div style={{ fontSize:22,lineHeight:1,flexShrink:0,marginBottom:2 }}>{avatar}</div>
+                )}
+
+                <div style={{ display:"flex",flexDirection:"column",alignItems:own?"flex-end":"flex-start",maxWidth:"72%" }}>
+                  {/* 送信者名（受信のみ） */}
+                  {!own && (
+                    <div style={{ fontSize:11,color:t.sub,fontWeight:700,marginBottom:3 }}>{m.senderName}</div>
+                  )}
+                  {/* バブル行：既読 + バブル + 時刻 */}
+                  <div style={{ display:"flex",alignItems:"flex-end",gap:4 }}>
+                    {/* 既読（送信メッセージの左側） */}
+                    {own && readCount > 0 && (
+                      <span style={{ fontSize:10,color:"#a78bfa",flexShrink:0,marginBottom:4,whiteSpace:"nowrap" }}>
+                        既読{readCount}
+                      </span>
+                    )}
+                    {/* メッセージバブル */}
+                    <div style={{ background:own?"linear-gradient(135deg,rgba(124,106,247,0.3),rgba(167,139,250,0.3))":t.inputBg,borderRadius:own?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"9px 13px",border:`1px solid ${own?"rgba(124,106,247,0.35)":t.border}`,fontSize:13,color:t.text,lineHeight:1.6,wordBreak:"break-word" }}>
+                      {renderWithLinks(m.text)}
+                    </div>
+                    {/* 時刻（受信メッセージの右側） */}
+                    {!own && (
+                      <span style={{ fontSize:10,color:t.subDim,flexShrink:0,marginBottom:4 }}>{fmtTime(m.createdAt)}</span>
+                    )}
+                  </div>
+                  {/* 時刻（送信メッセージの下） */}
+                  {own && (
+                    <div style={{ fontSize:10,color:t.subDim,marginTop:2 }}>{fmtTime(m.createdAt)}</div>
+                  )}
+                </div>
+
+                {/* 送信：右側にアバター */}
+                {own && (
+                  <div style={{ fontSize:22,lineHeight:1,flexShrink:0,marginBottom:2 }}>{avatar}</div>
+                )}
               </div>
-              <div style={{ maxWidth:"80%",background:isOwn(m)?"linear-gradient(135deg,rgba(124,106,247,0.3),rgba(167,139,250,0.3))":t.inputBg,borderRadius:isOwn(m)?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"9px 13px",border:`1px solid ${isOwn(m)?"rgba(124,106,247,0.35)":t.border}`,fontSize:13,color:t.text,lineHeight:1.5,wordBreak:"break-word" }}>
-                {renderWithLinks(m.text)}
-              </div>
-            </div>
-          ))}
+            );
+          })}
           <div ref={messagesEndRef}/>
         </div>
+
+        {/* 入力エリア */}
         <div style={{ padding:"10px 14px 14px",borderTop:`1px solid ${t.border}`,flexShrink:0 }}>
           <div style={{ display:"flex",gap:8,alignItems:"flex-end" }}>
             <div style={{ flex:1,position:"relative" }}>
               <textarea
                 value={msgInput}
-                onChange={e=>setMsgInput(e.target.value.slice(0,100))}
-                onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); handleSend(); }}}
-                placeholder="メッセージを入力… (100文字以内)"
-                rows={2}
-                style={{ width:"100%",background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:10,padding:"9px 12px",color:t.text,fontSize:13,resize:"none",boxSizing:"border-box",lineHeight:1.4,fontFamily:"inherit" }}
+                onChange={e=>setMsgInput(e.target.value.slice(0,200))}
+                placeholder="メッセージを入力… (200文字以内・Enterで改行)"
+                rows={3}
+                style={{ width:"100%",background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:10,padding:"9px 12px 20px",color:t.text,fontSize:13,resize:"none",boxSizing:"border-box",lineHeight:1.5,fontFamily:"inherit" }}
               />
-              <div style={{ position:"absolute",bottom:6,right:8,fontSize:10,color:msgInput.length>=90?"#f87171":t.subDim,pointerEvents:"none" }}>{msgInput.length}/100</div>
+              <div style={{ position:"absolute",bottom:5,right:8,fontSize:10,color:msgInput.length>=180?"#f87171":t.subDim,pointerEvents:"none" }}>{msgInput.length}/200</div>
             </div>
             <button onClick={handleSend} disabled={!msgInput.trim()}
               style={{ background:msgInput.trim()?"linear-gradient(135deg,#7c6af7,#a78bfa)":t.chipOff,border:"none",borderRadius:10,color:msgInput.trim()?"#fff":t.subDim,padding:"10px 16px",fontSize:13,fontWeight:700,flexShrink:0,alignSelf:"flex-end",cursor:msgInput.trim()?"pointer":"default",fontFamily:"inherit" }}>
@@ -1736,7 +1794,7 @@ export default function TodoApp() {
       {showLocModal && userLoc && <LocationModal lat={userLoc.lat} lng={userLoc.lng} onClose={() => setShowLocModal(false)} theme={t}/>}
       {showRecipe && <RecipeModal todos={todos} onClose={() => setShowRecipe(false)} theme={t}/>}
       {showSettings && <UserSettingsModal characterId={characterId} userName={userName} onClose={() => setShowSettings(false)} onChange={(char, name) => { setCharacterId(char); setUserName(name); }} theme={t}/>}
-      {showMessages && sync.groupId && <MessagesModal sync={sync} userName={userName} onClose={() => setShowMessages(false)} theme={t}/>}
+      {showMessages && sync.groupId && <MessagesModal sync={sync} userName={userName} characterId={characterId} onClose={() => setShowMessages(false)} theme={t}/>}
       <Assistant todos={todos} onDismiss={() => setNotification(null)} notification={notification}/>
 
       {/* Main content — full width, single column */}
