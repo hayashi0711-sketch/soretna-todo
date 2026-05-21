@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   onAuthStateChanged, GoogleAuthProvider,
   signInWithPopup, signOut,
 } from 'firebase/auth';
 import {
   collection, doc, setDoc, deleteDoc,
-  onSnapshot, query, where,
+  onSnapshot, query, where, orderBy,
   getDocs, writeBatch,
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -38,6 +38,8 @@ export function useSync({ todos, setTodos, tags, setTags, sharedFixedTagIds = []
   const [memberCount, setMemberCount] = useState(0);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginError,  setLoginError]  = useState(null);
+  const [messages,    setMessages]    = useState([]);
+  const [lastReadAt,  setLastReadAt]  = useState(0);
 
   // ローカルで書いた ID を記録して Firestore からの echo を無視する
   const localWriteIds = useRef(new Set());
@@ -222,6 +224,61 @@ export function useSync({ todos, setTodos, tags, setTags, sharedFixedTagIds = []
     setSharedFixedTagIds([]);
   }, [setTags, setSharedFixedTagIds]);
 
+  // ── メッセージ監視 ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!groupId || !user) return;
+    const unsub = onSnapshot(
+      query(collection(db, 'groups', groupId, 'messages'), orderBy('createdAt', 'asc')),
+      snapshot => {
+        const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        setMessages(msgs);
+      }
+    );
+    return unsub;
+  }, [groupId, user]);
+
+  // groupId 変更時に lastReadAt を localStorage から復元、離脱時はリセット
+  useEffect(() => {
+    if (groupId) {
+      try { setLastReadAt(parseInt(localStorage.getItem(`lastReadAt_${groupId}`) || '0', 10)); }
+      catch { setLastReadAt(0); }
+    } else {
+      setLastReadAt(0);
+      setMessages([]);
+    }
+  }, [groupId]);
+
+  // ── 未読カウント ────────────────────────────────────────────────────────────
+  const unreadCount = useMemo(() => {
+    if (!groupId || !user) return 0;
+    return messages.filter(m => m.createdAt > lastReadAt && m.senderUid !== user.uid).length;
+  }, [messages, lastReadAt, groupId, user]);
+
+  // ── メッセージ送信 ──────────────────────────────────────────────────────────
+  const sendMessage = useCallback(async (text, senderName) => {
+    if (!groupId || !user || !text.trim()) return;
+    const msgId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    try {
+      await setDoc(doc(db, 'groups', groupId, 'messages', msgId), {
+        id: msgId,
+        text: text.trim(),
+        senderName: senderName || 'ユーザー',
+        senderUid: user.uid,
+        createdAt: Date.now(),
+      });
+    } catch (e) {
+      console.warn('sendMessage error:', e);
+    }
+  }, [groupId, user]);
+
+  // ── 既読マーク ──────────────────────────────────────────────────────────────
+  const markAsRead = useCallback(() => {
+    if (!groupId) return;
+    const now = Date.now();
+    try { localStorage.setItem(`lastReadAt_${groupId}`, String(now)); } catch {}
+    setLastReadAt(now);
+  }, [groupId]);
+
   // ── 共有タグIDとタグ定義をFirestoreに保存 ──────────────────────────────
   const updateSharedTagIds = useCallback(async (sharedTagIds) => {
     if (!groupId) return;
@@ -252,5 +309,6 @@ export function useSync({ todos, setTodos, tags, setTags, sharedFixedTagIds = []
     isSharedTag, syncAddOrUpdate, syncDelete,
     createGroup, joinGroup, leaveGroup, updateSharedTagIds,
     login, logout,
+    messages, unreadCount, sendMessage, markAsRead,
   };
 }

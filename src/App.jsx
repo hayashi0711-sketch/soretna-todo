@@ -35,6 +35,15 @@ const FIXED_TAGS = [
   { id: "stock",    label: "ストック有", color: "#a78bfa", fixed: true },
 ];
 
+// キャラクター定義
+const CHARACTERS = [
+  { id: "cat",     emoji: "🐱", label: "ネコ" },
+  { id: "dog",     emoji: "🐶", label: "イヌ" },
+  { id: "panda",   emoji: "🐼", label: "パンダ" },
+  { id: "fox",     emoji: "🦊", label: "キツネ" },
+  { id: "penguin", emoji: "🐧", label: "ペンギン" },
+];
+
 // 買物カテゴリ
 const SHOPPING_CATEGORIES = [
   { id: "veg",     label: "野菜・果物",        order: 1 },
@@ -676,6 +685,50 @@ function SyncSettingsModal({ sync, onClose, theme }) {
   );
 }
 
+// ─── User Settings Modal ──────────────────────────────────────────────────────
+function UserSettingsModal({ characterId, userName, onClose, onChange, theme }) {
+  const [localChar, setLocalChar] = useState(characterId);
+  const [localName, setLocalName] = useState(userName);
+  const t = theme;
+  return (
+    <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
+      <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:340,boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}` }} onClick={e=>e.stopPropagation()}>
+        <div style={{ padding:"18px 20px 14px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+          <span style={{ fontSize:15,fontWeight:700,color:t.text }}>⚙ ユーザー設定</span>
+          <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
+        </div>
+        <div style={{ padding:"18px 20px" }}>
+          <div style={{ fontSize:13,fontWeight:700,color:t.sub,marginBottom:12 }}>キャラクター選択</div>
+          <div style={{ display:"flex",gap:8,justifyContent:"center",marginBottom:20,flexWrap:"wrap" }}>
+            {CHARACTERS.map(ch => (
+              <button key={ch.id} onClick={() => setLocalChar(ch.id)}
+                style={{ background:localChar===ch.id?"rgba(124,106,247,0.2)":"transparent",border:localChar===ch.id?"2px solid #a78bfa":"2px solid transparent",borderRadius:14,padding:"10px 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",minWidth:52,fontFamily:"inherit" }}>
+                <span style={{ fontSize:30, lineHeight:1 }}>{ch.emoji}</span>
+                <span style={{ fontSize:11,color:localChar===ch.id?"#a78bfa":t.sub,fontWeight:localChar===ch.id?700:400 }}>{ch.label}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize:13,fontWeight:700,color:t.sub,marginBottom:8 }}>ユーザー名</div>
+          <input
+            value={localName}
+            onChange={e=>setLocalName(e.target.value)}
+            placeholder="名前を入力…"
+            maxLength={20}
+            style={{ width:"100%",background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:10,padding:"10px 14px",color:t.text,fontSize:14,marginBottom:4,boxSizing:"border-box",fontFamily:"inherit" }}
+          />
+          <div style={{ fontSize:11,color:t.subDim,marginBottom:16,textAlign:"right" }}>{localName.length}/20</div>
+        </div>
+        <div style={{ padding:"12px 20px 20px" }}>
+          <button onClick={() => { onChange(localChar, localName); onClose(); }}
+            style={{ width:"100%",background:"linear-gradient(135deg,#7c6af7,#a78bfa)",border:"none",borderRadius:11,color:"#fff",fontSize:13,fontWeight:700,padding:"12px 0",cursor:"pointer",fontFamily:"inherit" }}>
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Tag Editor Modal ──────────────────────────────────────────────────────────
 function TagEditorModal({ tags, onClose, onSave, syncInfo, theme }) {
   const [localTags, setLocalTags] = useState(tags.map(t=>({...t})));
@@ -694,6 +747,13 @@ function TagEditorModal({ tags, onClose, onSave, syncInfo, theme }) {
     const next = localTags.map(x => x.id===tagId ? { ...x, shared: !x.shared } : x);
     setLocalTags(next);
     syncInfo?.updateSharedTagIds?.(next.filter(x=>x.shared).map(x=>x.id));
+  };
+  const moveTag = (idx, dir) => {
+    const next = [...localTags];
+    const to = idx + dir;
+    if (to < 0 || to >= next.length) return;
+    [next[idx], next[to]] = [next[to], next[idx]];
+    setLocalTags(next);
   };
   return (
     <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
@@ -720,7 +780,7 @@ function TagEditorModal({ tags, onClose, onSave, syncInfo, theme }) {
               </div>
             );
           })}
-          {localTags.map(tag=>(
+          {localTags.map((tag, idx)=>(
             <div key={tag.id} style={{ marginBottom:8 }}>
               {editingId===tag.id ? (
                 <div style={{ background:t.inputBg,borderRadius:12,padding:12 }}>
@@ -734,7 +794,14 @@ function TagEditorModal({ tags, onClose, onSave, syncInfo, theme }) {
                   </div>
                 </div>
               ) : (
-                <div style={{ display:"flex",alignItems:"center",gap:10,background:t.inputBg,borderRadius:10,padding:"10px 12px",border:`1px solid ${t.border}` }}>
+                <div style={{ display:"flex",alignItems:"center",gap:6,background:t.inputBg,borderRadius:10,padding:"8px 10px",border:`1px solid ${t.border}` }}>
+                  {/* 上下移動ボタン */}
+                  <div style={{ display:"flex",flexDirection:"column",gap:1,flexShrink:0 }}>
+                    <button onClick={()=>moveTag(idx,-1)} disabled={idx===0}
+                      style={{ background:idx===0?"transparent":t.chipOff,border:"none",borderRadius:5,color:idx===0?t.subDim:t.sub,width:26,height:22,cursor:idx===0?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,lineHeight:1 }}>▲</button>
+                    <button onClick={()=>moveTag(idx,1)} disabled={idx===localTags.length-1}
+                      style={{ background:idx===localTags.length-1?"transparent":t.chipOff,border:"none",borderRadius:5,color:idx===localTags.length-1?t.subDim:t.sub,width:26,height:22,cursor:idx===localTags.length-1?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,lineHeight:1 }}>▼</button>
+                  </div>
                   <div style={{ width:10,height:10,borderRadius:3,background:tag.color,flexShrink:0 }}/>
                   <span style={{ flex:1,fontSize:13,color:t.text }}>{tag.label}</span>
                   {syncInfo?.inGroup && (
@@ -948,7 +1015,7 @@ function TodoDetailModal({ todo, todos, tags, onClose, onSave, theme }) {
 
             {/* メモ */}
             <div>
-              <div style={{ fontSize:11,color:t.sub,marginBottom:5 }}>📝 メモ</div>
+              {isShopping && <div style={{ fontSize:11,color:t.sub,marginBottom:5 }}>📝 メモ</div>}
               <div style={{ position:"relative" }}>
                 <textarea value={memoListening && memoInterim ? memo + memoInterim : memo}
                   onChange={e=>{ if (!memoListening) setMemo(e.target.value); }} rows={2}
@@ -1182,6 +1249,88 @@ function RecipeModal({ todos, onClose, theme }) {
   );
 }
 
+// ─── Messages Modal ───────────────────────────────────────────────────────────
+function renderWithLinks(text) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part)
+      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color:"#60a5fa",textDecoration:"underline",wordBreak:"break-all" }}>{part}</a>
+      : <span key={i}>{part}</span>
+  );
+}
+
+function MessagesModal({ sync, userName, onClose, theme }) {
+  const [msgInput, setMsgInput] = useState("");
+  const messagesEndRef = useRef(null);
+  const t = theme;
+
+  useEffect(() => { sync.markAsRead?.(); }, []);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior:"smooth" });
+  }, [sync.messages]);
+
+  const handleSend = async () => {
+    if (!msgInput.trim()) return;
+    await sync.sendMessage(msgInput, userName || "ユーザー");
+    setMsgInput("");
+  };
+
+  const fmtTime = (ts) => {
+    const d = new Date(ts);
+    return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  };
+
+  const isOwn = (m) => sync.user && m.senderUid === sync.user.uid;
+
+  return (
+    <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
+      <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:400,maxHeight:"80vh",boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}`,display:"flex",flexDirection:"column" }} onClick={e=>e.stopPropagation()}>
+        <div style={{ padding:"16px 18px 12px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0 }}>
+          <span style={{ fontSize:15,fontWeight:700,color:t.text }}>🔔 グループ通知</span>
+          <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
+        </div>
+        <div style={{ flex:1,overflowY:"auto",padding:"12px 16px",display:"flex",flexDirection:"column",gap:8,minHeight:0 }}>
+          {(!sync.messages || sync.messages.length === 0) && (
+            <div style={{ textAlign:"center",color:t.subDim,fontSize:13,padding:"24px 0" }}>まだメッセージがありません</div>
+          )}
+          {sync.messages?.map(m => (
+            <div key={m.id} style={{ display:"flex",flexDirection:"column",alignItems:isOwn(m)?"flex-end":"flex-start" }}>
+              <div style={{ fontSize:11,color:t.subDim,marginBottom:2,display:"flex",gap:4,alignItems:"center" }}>
+                {!isOwn(m) && <span style={{ fontWeight:700,color:t.sub }}>{m.senderName}</span>}
+                <span>{fmtTime(m.createdAt)}</span>
+              </div>
+              <div style={{ maxWidth:"80%",background:isOwn(m)?"linear-gradient(135deg,rgba(124,106,247,0.3),rgba(167,139,250,0.3))":t.inputBg,borderRadius:isOwn(m)?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"9px 13px",border:`1px solid ${isOwn(m)?"rgba(124,106,247,0.35)":t.border}`,fontSize:13,color:t.text,lineHeight:1.5,wordBreak:"break-word" }}>
+                {renderWithLinks(m.text)}
+              </div>
+            </div>
+          ))}
+          <div ref={messagesEndRef}/>
+        </div>
+        <div style={{ padding:"10px 14px 14px",borderTop:`1px solid ${t.border}`,flexShrink:0 }}>
+          <div style={{ display:"flex",gap:8,alignItems:"flex-end" }}>
+            <div style={{ flex:1,position:"relative" }}>
+              <textarea
+                value={msgInput}
+                onChange={e=>setMsgInput(e.target.value.slice(0,100))}
+                onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); handleSend(); }}}
+                placeholder="メッセージを入力… (100文字以内)"
+                rows={2}
+                style={{ width:"100%",background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:10,padding:"9px 12px",color:t.text,fontSize:13,resize:"none",boxSizing:"border-box",lineHeight:1.4,fontFamily:"inherit" }}
+              />
+              <div style={{ position:"absolute",bottom:6,right:8,fontSize:10,color:msgInput.length>=90?"#f87171":t.subDim,pointerEvents:"none" }}>{msgInput.length}/100</div>
+            </div>
+            <button onClick={handleSend} disabled={!msgInput.trim()}
+              style={{ background:msgInput.trim()?"linear-gradient(135deg,#7c6af7,#a78bfa)":t.chipOff,border:"none",borderRadius:10,color:msgInput.trim()?"#fff":t.subDim,padding:"10px 16px",fontSize:13,fontWeight:700,flexShrink:0,alignSelf:"flex-end",cursor:msgInput.trim()?"pointer":"default",fontFamily:"inherit" }}>
+              送信
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main App ──────────────────────────────────────────────────────────────────
 
 export default function TodoApp() {
@@ -1214,6 +1363,10 @@ export default function TodoApp() {
   const [showLocModal,setShowLocModal]= useState(false);
   const [showRecipe,    setShowRecipe]    = useState(false);
   const [showSync,      setShowSync]      = useState(false);
+  const [showSettings,  setShowSettings]  = useState(false);
+  const [showMessages,  setShowMessages]  = useState(false);
+  const [characterId,   setCharacterId]   = useState("cat");
+  const [userName,      setUserName]      = useState("");
   const inputRef    = useRef(null);
   const nextId      = useRef(10);
   const stopVoice   = useRef(null);
@@ -1260,18 +1413,22 @@ export default function TodoApp() {
   // ── Init: load persisted data + Capacitor setup ────────────────────────────
   useEffect(() => {
     const init = async () => {
-      const [sTheme, sTags, sTodos, sNextId, sSelTag] = await Promise.all([
-        storage.get("themeId",  "dark"),
-        storage.get("tags",     DEFAULT_TAGS),
-        storage.get("todos",    INITIAL_TODOS),
-        storage.get("nextId",   10),
-        storage.get("selTag",   "personal"),
+      const [sTheme, sTags, sTodos, sNextId, sSelTag, sChar, sName] = await Promise.all([
+        storage.get("themeId",     "dark"),
+        storage.get("tags",        DEFAULT_TAGS),
+        storage.get("todos",       INITIAL_TODOS),
+        storage.get("nextId",      10),
+        storage.get("selTag",      "personal"),
+        storage.get("characterId", "cat"),
+        storage.get("userName",    ""),
       ]);
       setThemeId(sTheme);
       setTags(sTags);
       setTodos(sTodos);
       nextId.current = sNextId;
       setSelectedTag(sSelTag);
+      setCharacterId(sChar);
+      setUserName(sName);
       setLoaded(true);
 
       await requestNotificationPermission();
@@ -1302,10 +1459,12 @@ export default function TodoApp() {
   }, [showTagEd, editTodo, showCal]);
 
   // ── Persist on change ─────────────────────────────────────────────────────
-  useEffect(() => { if (loaded) storage.set("themeId", themeId); }, [themeId, loaded]);
-  useEffect(() => { if (loaded) storage.set("tags",    tags);    }, [tags,    loaded]);
+  useEffect(() => { if (loaded) storage.set("themeId",     themeId);     }, [themeId,     loaded]);
+  useEffect(() => { if (loaded) storage.set("tags",        tags);         }, [tags,        loaded]);
   useEffect(() => { if (loaded) { storage.set("todos", todos); storage.set("nextId", nextId.current); } }, [todos, loaded]);
-  useEffect(() => { if (loaded) storage.set("selTag",  selectedTag); }, [selectedTag, loaded]);
+  useEffect(() => { if (loaded) storage.set("selTag",      selectedTag);  }, [selectedTag, loaded]);
+  useEffect(() => { if (loaded) storage.set("characterId", characterId);  }, [characterId, loaded]);
+  useEffect(() => { if (loaded) storage.set("userName",    userName);     }, [userName,    loaded]);
 
   // ── Tag validity guard ────────────────────────────────────────────────────
   useEffect(() => {
@@ -1576,6 +1735,8 @@ export default function TodoApp() {
       {editTodo  && <TodoDetailModal todo={editTodo} todos={todos} tags={tags} onClose={() => setEditTodo(null)} onSave={saveEdit} theme={t}/>}
       {showLocModal && userLoc && <LocationModal lat={userLoc.lat} lng={userLoc.lng} onClose={() => setShowLocModal(false)} theme={t}/>}
       {showRecipe && <RecipeModal todos={todos} onClose={() => setShowRecipe(false)} theme={t}/>}
+      {showSettings && <UserSettingsModal characterId={characterId} userName={userName} onClose={() => setShowSettings(false)} onChange={(char, name) => { setCharacterId(char); setUserName(name); }} theme={t}/>}
+      {showMessages && sync.groupId && <MessagesModal sync={sync} userName={userName} onClose={() => setShowMessages(false)} theme={t}/>}
       <Assistant todos={todos} onDismiss={() => setNotification(null)} notification={notification}/>
 
       {/* Main content — full width, single column */}
@@ -1586,7 +1747,11 @@ export default function TodoApp() {
           {/* Row 1: app title + progress + location btn */}
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
             <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", gap:7 }}>
-              <span style={{ fontSize:24, lineHeight:1 }}>🐱</span>
+              <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:1,flexShrink:0 }}>
+                <span style={{ fontSize:22, lineHeight:1 }}>{CHARACTERS.find(c=>c.id===characterId)?.emoji||'🐱'}</span>
+                <button onClick={() => setShowSettings(true)}
+                  style={{ background:"transparent",border:"none",padding:0,color:t.sub,fontSize:11,cursor:"pointer",lineHeight:1,fontFamily:"inherit" }}>⚙</button>
+              </div>
               <div>
                 <div style={{ fontFamily:"'Space Mono',monospace", fontSize:8, color:t.sub, letterSpacing:3, marginBottom:1 }}>MY TASKS</div>
                 <div style={{ lineHeight:1.1 }}>
@@ -1610,13 +1775,27 @@ export default function TodoApp() {
               {locLoading ? "⌛" : "🏷️"}<span style={{whiteSpace:"nowrap"}}>周辺お買得情報</span>
             </button>
           </div>
-          {/* Row 2: theme switcher + sync button */}
+          {/* Row 2: theme switcher + sync/notice buttons */}
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <button onClick={() => setShowSync(true)}
-              title="デバイス間同期"
-              style={{ background: sync.groupId ? "linear-gradient(135deg,#7c6af7,#a78bfa)" : t.chipOff, border:"none", borderRadius:9, color: sync.groupId ? "#fff" : t.sub, padding:"5px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, cursor:"pointer" }}>
-              🔗<span style={{whiteSpace:"nowrap"}}>{sync.groupId ? "同期中" : "同期"}</span>
-            </button>
+            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              <button onClick={() => setShowSync(true)}
+                title="デバイス間同期"
+                style={{ background: sync.groupId ? "linear-gradient(135deg,#7c6af7,#a78bfa)" : t.chipOff, border:"none", borderRadius:9, color: sync.groupId ? "#fff" : t.sub, padding:"5px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, cursor:"pointer" }}>
+                🔗<span style={{whiteSpace:"nowrap"}}>{sync.groupId ? "同期中" : "同期"}</span>
+              </button>
+              {sync.groupId && (
+                <div style={{ position:"relative" }}>
+                  <button onClick={() => { setShowMessages(true); sync.markAsRead(); }}
+                    title="グループ通知"
+                    style={{ background:sync.unreadCount>0?"linear-gradient(135deg,#f97316,#fb923c)":t.chipOff, border:"none", borderRadius:9, color:sync.unreadCount>0?"#fff":t.sub, padding:"5px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, cursor:"pointer" }}>
+                    🔔<span style={{whiteSpace:"nowrap"}}>通知</span>
+                  </button>
+                  {sync.unreadCount > 0 && (
+                    <span style={{ position:"absolute",top:-5,right:-5,background:"#f87171",color:"#fff",borderRadius:"50%",width:16,height:16,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,pointerEvents:"none" }}>！</span>
+                  )}
+                </div>
+              )}
+            </div>
             <ThemeSwitcher currentThemeId={themeId} onChange={setThemeId} size={22}/>
           </div>
         </div>
@@ -1632,10 +1811,10 @@ export default function TodoApp() {
         {/* ── ① タグ管理 ＋ タグ選択チップ ── */}
         <div style={{ padding:"10px 16px 10px", borderBottom:`1px solid ${t.border}`, background:t.card }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-            <span style={{ fontSize:11, color:t.subDim, fontWeight:600, letterSpacing:1 }}>タグ管理</span>
+            <div/>
             <button onClick={()=>setShowTagEd(true)}
-              style={{ background:t.chipOff, color:t.sub, border:"none", borderRadius:8, padding:"5px 12px", fontSize:12, display:"flex", alignItems:"center", gap:4 }}>
-              <TagIcon size={12}/> タグを管理
+              style={{ background:t.chipOff, color:t.sub, border:`1px solid ${t.border}`, borderRadius:10, padding:"7px 16px", fontSize:13, fontWeight:600, display:"flex", alignItems:"center", gap:5, cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
+              <TagIcon size={13}/> タグ管理
             </button>
           </div>
           <div style={{ display:"flex",gap:6,flexWrap:"wrap",alignItems:"center" }}>
@@ -1650,7 +1829,7 @@ export default function TodoApp() {
         <div style={{ padding:"10px 16px 10px", borderBottom:`1px solid ${t.border}`, background:t.card }}>
           <div style={{ position:"relative", display:"flex", gap:8, background:t.inputBg, borderRadius:14, padding:"4px 6px 4px 14px", border:`1px solid ${t.inputBorder}`, alignItems:"center", touchAction:"manipulation" }}>
             <input ref={inputRef} readOnly={listening} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTodo()}
-              placeholder={listening ? (interimText || "聞いています…") : "新しいタスクを入力…"} enterKeyHint="done"
+              placeholder={listening ? (interimText || "聞いています…") : "新タスク入力"} enterKeyHint="done"
               style={{ flex:1,background:"transparent",border:"none",color:t.text,fontSize:16,padding:"10px 0",minWidth:0 }}/>
             {interimText && (
               <span style={{ position:"absolute", bottom:"calc(100% + 4px)", left:14, fontSize:12, color:"#a78bfa", background:t.card, padding:"2px 8px", borderRadius:6, border:`1px solid rgba(124,106,247,0.3)`, pointerEvents:"none", whiteSpace:"nowrap", maxWidth:"80vw", overflow:"hidden", textOverflow:"ellipsis" }}>
