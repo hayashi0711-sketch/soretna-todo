@@ -1278,8 +1278,15 @@ function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan, isGroupShar
   const [mealListening, setMealListening] = useState(false);
   const [mealInterim, setMealInterim] = useState("");
   const stopMealVoice = useRef(null);
-  const inputTextRef = useRef("");
+  const inputTextRef = useRef("");        // IME確定済みテキストをrefでも保持
+  const inputElRef = useRef(null);        // inputのDOM参照（IME対策）
+  const openDateRef = useRef(null);       // 音声タイ��ー内でopenDateを参照するた���
+  const mealPlanRef = useRef(mealPlan);   // コールバック内でmealPlanを参照するため
+  const voiceSilenceTimer = useRef(null); // 音声無音タイマー
+
   useEffect(() => { inputTextRef.current = inputText; }, [inputText]);
+  useEffect(() => { openDateRef.current = openDate; }, [openDate]);
+  useEffect(() => { mealPlanRef.current = mealPlan; }, [mealPlan]);
 
   const toDateStr = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const todayStr = toDateStr(new Date());
@@ -1305,17 +1312,36 @@ function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan, isGroupShar
     return Array.isArray(v) ? v : [v];
   };
 
-  const addMeal = (dateStr) => {
-    const text = inputText.trim();
-    if (!text) return;
-    const meals = getMeals(dateStr);
-    if (meals.length >= 3) return;
-    onUpdateMealPlan({ ...mealPlan, [dateStr]: [...meals, text] });
+  // refから現在の献立リストを取得（コールバック内用）
+  const getMealsRef = (dateStr) => {
+    const v = mealPlanRef.current[dateStr];
+    if (!v) return [];
+    return Array.isArray(v) ? v : [v];
+  };
+
+  // 実際に献立を追加する共通処理（IMEや音声タイマーからも呼べる形）
+  const commitMeal = (dateStr, text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    const meals = getMealsRef(dateStr);
+    if (meals.length >= 3) return false;
+    onUpdateMealPlan({ ...mealPlanRef.current, [dateStr]: [...meals, trimmed] });
     setInputText("");
     inputTextRef.current = "";
+    if (inputElRef.current) inputElRef.current.value = "";
     stopMealVoice.current?.();
+    clearTimeout(voiceSilenceTimer.current);
     setMealListening(false);
     setMealInterim("");
+    setOpenDate(null);
+    return true;
+  };
+
+  // 決定ボタン・Enterキー用：inputElRefのDOM値を優先してIME問題を回避
+  const addMeal = (dateStr) => {
+    const domVal = inputElRef.current?.value || "";
+    const text = domVal.trim() || inputTextRef.current.trim();
+    commitMeal(dateStr, text);
   };
 
   const removeMeal = (dateStr, idx) => {
@@ -1331,6 +1357,7 @@ function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan, isGroupShar
 
   const openInput = (dateStr) => {
     stopMealVoice.current?.();
+    clearTimeout(voiceSilenceTimer.current);
     setMealListening(false);
     setMealInterim("");
     setInputText("");
@@ -1341,24 +1368,49 @@ function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan, isGroupShar
   const toggleVoice = async () => {
     if (mealListening) {
       stopMealVoice.current?.();
+      clearTimeout(voiceSilenceTimer.current);
       setMealListening(false);
       setMealInterim("");
       return;
     }
     await haptics.light();
     setMealListening(true);
+
+    let voiceAdded = false;
+    const performVoiceAdd = () => {
+      if (voiceAdded) return;
+      const d = openDateRef.current;
+      const finalText = inputTextRef.current.trim();
+      if (finalText && d) {
+        voiceAdded = true;
+        commitMeal(d, finalText);
+      } else {
+        setMealListening(false);
+        setMealInterim("");
+      }
+    };
+
     stopMealVoice.current = startListening({
       onResult: text => {
-        setInputText(prev => {
-          const v = prev + text;
-          inputTextRef.current = v;
-          return v;
-        });
+        const v = inputTextRef.current + text;
+        inputTextRef.current = v;
+        setInputText(v);
         setMealInterim("");
+        // 1.5秒無音で自動追加（メインタスク入力と同じ動作）
+        clearTimeout(voiceSilenceTimer.current);
+        voiceSilenceTimer.current = setTimeout(() => {
+          performVoiceAdd();
+          stopMealVoice.current?.();
+        }, 1500);
       },
       onInterim: text => setMealInterim(text),
-      onEnd: () => { setMealListening(false); setMealInterim(""); },
+      // Android Chrome は onEnd が早期発火する���とがあるため追加を試みる
+      onEnd: () => {
+        clearTimeout(voiceSilenceTimer.current);
+        performVoiceAdd();
+      },
       onError: e => {
+        clearTimeout(voiceSilenceTimer.current);
         setMealListening(false);
         setMealInterim("");
         if (e === "unsupported")
@@ -1455,11 +1507,13 @@ function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan, isGroupShar
                         {/* 入力欄＋マイク（内包してはみ出しを防止） */}
                         <div style={{ flex:1,display:"flex",alignItems:"center",background:t.inputBg,borderRadius:10,padding:"4px 4px 4px 10px",border:`1px solid ${t.inputBorder}`,minWidth:0,overflow:"hidden" }}>
                           <input
+                            ref={inputElRef}
                             autoFocus
                             readOnly={mealListening}
                             value={mealListening ? (mealInterim || "") : inputText}
                             onChange={e=>{ if(!mealListening){ setInputText(e.target.value); inputTextRef.current=e.target.value; } }}
-                            onKeyDown={e=>e.key==="Enter"&&addMeal(dateStr)}
+                            onCompositionEnd={e=>{ inputTextRef.current=e.target.value; }}
+                            onKeyDown={e=>{ if(e.key==="Enter"&&!e.nativeEvent?.isComposing){ addMeal(dateStr); } }}
                             placeholder={mealListening ? "聞いています…" : "献立を入力"}
                             style={{ flex:1,background:"transparent",border:"none",color:t.text,fontSize:13,padding:"7px 0",fontFamily:"inherit",minWidth:0 }}
                           />
