@@ -686,14 +686,14 @@ function SyncSettingsModal({ sync, onClose, theme }) {
 }
 
 // ─── User Settings Modal ──────────────────────────────────────────────────────
-function UserSettingsModal({ characterId, userName, onClose, onChange, theme }) {
+function UserSettingsModal({ characterId, userName, themeId, onClose, onChange, onThemeChange, theme }) {
   const [localChar, setLocalChar] = useState(characterId);
   const [localName, setLocalName] = useState(userName);
   const t = theme;
   return (
     <div style={{ position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
-      <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:340,boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}` }} onClick={e=>e.stopPropagation()}>
-        <div style={{ padding:"18px 20px 14px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+      <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:340,maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.7)",border:`1px solid ${t.border}` }} onClick={e=>e.stopPropagation()}>
+        <div style={{ padding:"18px 20px 14px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,background:t.card,zIndex:1 }}>
           <span style={{ fontSize:15,fontWeight:700,color:t.text }}>⚙ ユーザー設定</span>
           <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
         </div>
@@ -716,7 +716,9 @@ function UserSettingsModal({ characterId, userName, onClose, onChange, theme }) 
             maxLength={20}
             style={{ width:"100%",background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:10,padding:"10px 14px",color:t.text,fontSize:14,marginBottom:4,boxSizing:"border-box",fontFamily:"inherit" }}
           />
-          <div style={{ fontSize:11,color:t.subDim,marginBottom:16,textAlign:"right" }}>{localName.length}/20</div>
+          <div style={{ fontSize:11,color:t.subDim,marginBottom:20,textAlign:"right" }}>{localName.length}/20</div>
+          <div style={{ fontSize:13,fontWeight:700,color:t.sub,marginBottom:10 }}>背景テーマ</div>
+          <ThemeSwitcher currentThemeId={themeId} onChange={onThemeChange} size={28}/>
         </div>
         <div style={{ padding:"12px 20px 20px" }}>
           <button onClick={() => { onChange(localChar, localName); onClose(); }}
@@ -1268,21 +1270,24 @@ function renderWithLinks(text) {
 }
 
 // ─── MealPlanModal ────────────────────────────────────────────────────────────
-function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan, mealCandidates, onUpdateCandidates }) {
+function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan }) {
   const t = theme;
-  const [candidateInput, setCandidateInput] = useState("");
-  const [weekOffset, setWeekOffset] = useState(0); // -1=先週, 0=今週, 1=来週
-  const [dayPickerDate, setDayPickerDate] = useState(null);
-  const [customInput, setCustomInput] = useState("");
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [openDate, setOpenDate] = useState(null);
+  const [inputText, setInputText] = useState("");
+  const [mealListening, setMealListening] = useState(false);
+  const [mealInterim, setMealInterim] = useState("");
+  const stopMealVoice = useRef(null);
+  const inputTextRef = useRef("");
+  useEffect(() => { inputTextRef.current = inputText; }, [inputText]);
 
   const toDateStr = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const todayStr = toDateStr(new Date());
 
   const getWeekDays = (offset) => {
     const today = new Date();
-    const dow = today.getDay();
     const sunday = new Date(today);
-    sunday.setDate(today.getDate() - dow + offset * 7);
+    sunday.setDate(today.getDate() - today.getDay() + offset * 7);
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(sunday);
       d.setDate(sunday.getDate() + i);
@@ -1294,26 +1299,72 @@ function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan, mealCandida
   const WEEK_LABELS = ["日","月","火","水","木","金","土"];
   const TAB_LABELS = ["先週","今週","来週"];
 
-  const addCandidate = () => {
-    const v = candidateInput.trim();
-    if (!v || mealCandidates.includes(v)) return;
-    onUpdateCandidates([...mealCandidates, v]);
-    setCandidateInput("");
+  const getMeals = (dateStr) => {
+    const v = mealPlan[dateStr];
+    if (!v) return [];
+    return Array.isArray(v) ? v : [v];
   };
 
-  const removeCandidate = (meal) => onUpdateCandidates(mealCandidates.filter(c => c !== meal));
-
-  const setMeal = (dateStr, meal) => {
-    if (!meal.trim()) return;
-    onUpdateMealPlan({ ...mealPlan, [dateStr]: meal.trim() });
-    setDayPickerDate(null);
-    setCustomInput("");
+  const addMeal = (dateStr) => {
+    const text = inputText.trim();
+    if (!text) return;
+    const meals = getMeals(dateStr);
+    if (meals.length >= 3) return;
+    onUpdateMealPlan({ ...mealPlan, [dateStr]: [...meals, text] });
+    setInputText("");
+    inputTextRef.current = "";
+    stopMealVoice.current?.();
+    setMealListening(false);
+    setMealInterim("");
   };
 
-  const clearMeal = (dateStr) => {
-    const updated = { ...mealPlan };
-    delete updated[dateStr];
-    onUpdateMealPlan(updated);
+  const removeMeal = (dateStr, idx) => {
+    const next = getMeals(dateStr).filter((_, i) => i !== idx);
+    if (next.length === 0) {
+      const updated = { ...mealPlan };
+      delete updated[dateStr];
+      onUpdateMealPlan(updated);
+    } else {
+      onUpdateMealPlan({ ...mealPlan, [dateStr]: next });
+    }
+  };
+
+  const openInput = (dateStr) => {
+    stopMealVoice.current?.();
+    setMealListening(false);
+    setMealInterim("");
+    setInputText("");
+    inputTextRef.current = "";
+    setOpenDate(openDate === dateStr ? null : dateStr);
+  };
+
+  const toggleVoice = async () => {
+    if (mealListening) {
+      stopMealVoice.current?.();
+      setMealListening(false);
+      setMealInterim("");
+      return;
+    }
+    await haptics.light();
+    setMealListening(true);
+    stopMealVoice.current = startListening({
+      onResult: text => {
+        setInputText(prev => {
+          const v = prev + text;
+          inputTextRef.current = v;
+          return v;
+        });
+        setMealInterim("");
+      },
+      onInterim: text => setMealInterim(text),
+      onEnd: () => { setMealListening(false); setMealInterim(""); },
+      onError: e => {
+        setMealListening(false);
+        setMealInterim("");
+        if (e === "unsupported")
+          alert("このブラウザは音声入力に対応していません（ChromeかSafariをお使いください）");
+      },
+    });
   };
 
   return (
@@ -1321,120 +1372,96 @@ function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan, mealCandida
       <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:420,maxHeight:"90vh",boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}`,display:"flex",flexDirection:"column" }} onClick={e=>e.stopPropagation()}>
 
         {/* ヘッダー */}
-        <div style={{ padding:"16px 18px 12px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0 }}>
-          <span style={{ fontSize:15,fontWeight:700,color:t.text }}>🍽️ 献立</span>
+        <div style={{ padding:"14px 16px 12px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0 }}>
+          <span style={{ fontSize:14,fontWeight:700,color:t.text }}>🍽️ 今週の献立はそれな！</span>
           <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
         </div>
 
-        <div style={{ flex:1,overflowY:"auto",minHeight:0 }}>
-
-          {/* 献立候補セクション */}
-          <div style={{ padding:"14px 16px",borderBottom:`1px solid ${t.border}` }}>
-            <div style={{ fontSize:13,fontWeight:700,color:t.text,marginBottom:8 }}>📋 献立候補</div>
-            <div style={{ display:"flex",gap:6,marginBottom:8 }}>
-              <input
-                value={candidateInput}
-                onChange={e=>setCandidateInput(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&addCandidate()}
-                placeholder="献立名を入力して追加"
-                style={{ flex:1,background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:8,padding:"8px 10px",color:t.text,fontSize:13,fontFamily:"inherit" }}
-              />
-              <button onClick={addCandidate}
-                style={{ background:"linear-gradient(135deg,#7c6af7,#a78bfa)",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:13,fontWeight:700,whiteSpace:"nowrap",cursor:"pointer",fontFamily:"inherit" }}>
-                ＋ 追加
+        {/* 週タブ */}
+        <div style={{ display:"flex",borderBottom:`1px solid ${t.border}`,flexShrink:0 }}>
+          {TAB_LABELS.map((label,i) => {
+            const offset = i - 1;
+            return (
+              <button key={label} onClick={()=>{ setWeekOffset(offset); setOpenDate(null); }}
+                style={{ flex:1,padding:"10px",fontSize:13,fontWeight:weekOffset===offset?700:500,color:weekOffset===offset?t.text:t.sub,background:weekOffset===offset?t.inputBg:"transparent",border:"none",borderBottom:weekOffset===offset?"2px solid #7c6af7":"2px solid transparent",cursor:"pointer",fontFamily:"inherit",transition:"all 0.15s" }}>
+                {label}
               </button>
-            </div>
-            {mealCandidates.length === 0 ? (
-              <div style={{ fontSize:12,color:t.subDim,textAlign:"center",padding:"6px 0" }}>献立候補がありません。上から登録してください。</div>
-            ) : (
-              <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
-                {mealCandidates.map(meal => (
-                  <div key={meal} style={{ display:"flex",alignItems:"center",gap:4,background:t.inputBg,borderRadius:20,padding:"5px 10px 5px 12px",border:`1px solid ${t.border}` }}>
-                    <span style={{ fontSize:12,color:t.text }}>{meal}</span>
-                    <button onClick={()=>removeCandidate(meal)} style={{ background:"none",border:"none",color:"#f87171",fontSize:12,cursor:"pointer",padding:0,lineHeight:1,marginLeft:2,fontFamily:"inherit" }}>✕</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+            );
+          })}
+        </div>
 
-          {/* 週タブ */}
-          <div style={{ display:"flex",borderBottom:`1px solid ${t.border}`,flexShrink:0,background:t.card }}>
-            {TAB_LABELS.map((label,i) => {
-              const offset = i - 1;
-              return (
-                <button key={label} onClick={()=>{ setWeekOffset(offset); setDayPickerDate(null); }}
-                  style={{ flex:1,padding:"10px",fontSize:13,fontWeight:weekOffset===offset?700:500,color:weekOffset===offset?t.text:t.sub,background:weekOffset===offset?t.inputBg:"transparent",border:"none",borderBottom:weekOffset===offset?"2px solid #7c6af7":"2px solid transparent",cursor:"pointer",fontFamily:"inherit",transition:"all 0.15s" }}>
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-
+        <div style={{ flex:1,overflowY:"auto",minHeight:0 }}>
           {/* カレンダー（7日間） */}
           <div style={{ padding:"10px 14px",display:"flex",flexDirection:"column",gap:6 }}>
             {weekDays.map((day) => {
               const dateStr = toDateStr(day);
-              const meal = mealPlan[dateStr];
+              const meals = getMeals(dateStr);
               const isToday = dateStr === todayStr;
-              const isOpen = dayPickerDate === dateStr;
+              const isOpen = openDate === dateStr;
               const isSun = day.getDay() === 0;
               const isSat = day.getDay() === 6;
+              const canAdd = meals.length < 3;
 
               return (
                 <div key={dateStr}>
-                  <div style={{ display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderRadius:10,border:`1px solid ${isToday?"#7c6af7":t.border}`,background:isToday?"rgba(124,106,247,0.08)":t.inputBg }}>
-                    {/* 日付 */}
-                    <div style={{ minWidth:44,flexShrink:0 }}>
-                      <div style={{ fontSize:10,color:isToday?"#7c6af7":isSun?"#f87171":isSat?"#60a5fa":t.sub,fontWeight:isToday?700:500 }}>{WEEK_LABELS[day.getDay()]}</div>
-                      <div style={{ fontSize:15,fontWeight:700,color:isToday?"#7c6af7":isSun?"#f87171":isSat?"#60a5fa":t.text,lineHeight:1.2 }}>{day.getMonth()+1}/{day.getDate()}</div>
-                    </div>
-
-                    {/* 献立表示 */}
-                    {meal ? (
-                      <div style={{ flex:1,display:"flex",alignItems:"center",gap:6,minWidth:0 }}>
-                        <span style={{ fontSize:13,color:t.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>🍽️ {meal}</span>
-                        <button onClick={()=>{ setDayPickerDate(isOpen?null:dateStr); setCustomInput(""); }}
-                          style={{ background:t.chipOff,border:"none",borderRadius:6,color:t.sub,padding:"4px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0 }}>変更</button>
-                        <button onClick={()=>clearMeal(dateStr)}
-                          style={{ background:"rgba(248,113,113,0.12)",border:"none",borderRadius:6,color:"#f87171",padding:"4px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0 }}>✕</button>
+                  <div style={{ padding:"10px 12px",borderRadius:10,border:`1px solid ${isToday?"#7c6af7":t.border}`,background:isToday?"rgba(124,106,247,0.08)":t.inputBg }}>
+                    <div style={{ display:"flex",alignItems:"flex-start",gap:8 }}>
+                      {/* 日付 */}
+                      <div style={{ minWidth:44,flexShrink:0,paddingTop:2 }}>
+                        <div style={{ fontSize:10,color:isToday?"#7c6af7":isSun?"#f87171":isSat?"#60a5fa":t.sub,fontWeight:isToday?700:500 }}>{WEEK_LABELS[day.getDay()]}</div>
+                        <div style={{ fontSize:15,fontWeight:700,color:isToday?"#7c6af7":isSun?"#f87171":isSat?"#60a5fa":t.text,lineHeight:1.2 }}>{day.getMonth()+1}/{day.getDate()}</div>
                       </div>
-                    ) : (
-                      <button onClick={()=>{ setDayPickerDate(isOpen?null:dateStr); setCustomInput(""); }}
-                        style={{ flex:1,background:"transparent",border:`1px dashed ${t.border}`,borderRadius:8,color:t.subDim,padding:"8px 12px",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit" }}>
-                        ＋ 献立を設定
-                      </button>
-                    )}
+
+                      {/* 献立リスト */}
+                      <div style={{ flex:1,minWidth:0 }}>
+                        {meals.length === 0 && !isOpen && (
+                          <button onClick={()=>openInput(dateStr)}
+                            style={{ width:"100%",background:"transparent",border:`1px dashed ${t.border}`,borderRadius:8,color:t.subDim,padding:"8px 10px",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit" }}>
+                            ＋ 献立を設定
+                          </button>
+                        )}
+                        {meals.map((meal, idx) => (
+                          <div key={idx} style={{ display:"flex",alignItems:"center",gap:4,marginBottom:4 }}>
+                            <span style={{ fontSize:12,color:t.sub,flexShrink:0 }}>{idx+1}.</span>
+                            <span style={{ fontSize:13,color:t.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{meal}</span>
+                            <button onClick={()=>removeMeal(dateStr, idx)}
+                              style={{ background:"rgba(248,113,113,0.12)",border:"none",borderRadius:5,color:"#f87171",padding:"3px 7px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0 }}>✕</button>
+                          </div>
+                        ))}
+                        {meals.length > 0 && canAdd && !isOpen && (
+                          <button onClick={()=>openInput(dateStr)}
+                            style={{ background:t.chipOff,border:"none",borderRadius:7,color:t.sub,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit",marginTop:2 }}>
+                            ＋ 追加（{meals.length}/3）
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* 献立選択ピッカー */}
+                  {/* 入力エリア */}
                   {isOpen && (
                     <div style={{ marginTop:4,padding:"10px 12px",background:t.card,borderRadius:10,border:`1px solid ${t.border}` }}>
-                      <div style={{ display:"flex",gap:6,marginBottom:8 }}>
+                      <div style={{ position:"relative",display:"flex",gap:6,alignItems:"center",background:t.inputBg,borderRadius:10,padding:"4px 6px 4px 10px",border:`1px solid ${t.inputBorder}` }}>
                         <input
                           autoFocus
-                          value={customInput}
-                          onChange={e=>setCustomInput(e.target.value)}
-                          onKeyDown={e=>e.key==="Enter"&&setMeal(dateStr,customInput)}
-                          placeholder="献立を直接入力"
-                          style={{ flex:1,background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:8,padding:"7px 10px",color:t.text,fontSize:12,fontFamily:"inherit" }}
+                          readOnly={mealListening}
+                          value={mealListening ? (mealInterim || "") : inputText}
+                          onChange={e=>{ if(!mealListening){ setInputText(e.target.value); inputTextRef.current=e.target.value; } }}
+                          onKeyDown={e=>e.key==="Enter"&&addMeal(dateStr)}
+                          placeholder={mealListening ? "聞いています…" : "献立を入力"}
+                          style={{ flex:1,background:"transparent",border:"none",color:t.text,fontSize:13,padding:"8px 0",fontFamily:"inherit" }}
                         />
-                        <button onClick={()=>setMeal(dateStr,customInput)}
-                          style={{ background:"linear-gradient(135deg,#7c6af7,#a78bfa)",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap" }}>決定</button>
+                        <button onClick={toggleVoice} className={mealListening?"pulse":""}
+                          style={{ background:mealListening?"rgba(248,113,113,0.2)":t.chipOff,border:"none",borderRadius:8,color:mealListening?"#f87171":t.sub,padding:"7px 9px",display:"flex",alignItems:"center",flexShrink:0 }}>
+                          <MicIcon active={mealListening}/>
+                        </button>
+                        <button onClick={()=>addMeal(dateStr)}
+                          style={{ background:"linear-gradient(135deg,#7c6af7,#a78bfa)",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0 }}>決定</button>
                       </div>
-                      {mealCandidates.length > 0 && (
-                        <>
-                          <div style={{ fontSize:11,color:t.subDim,marginBottom:6 }}>候補から選ぶ</div>
-                          <div style={{ display:"flex",flexWrap:"wrap",gap:5 }}>
-                            {mealCandidates.map(c => (
-                              <button key={c} onClick={()=>setMeal(dateStr,c)}
-                                style={{ background:t.inputBg,border:`1px solid ${t.border}`,borderRadius:20,color:t.text,padding:"5px 12px",fontSize:12,cursor:"pointer",fontFamily:"inherit" }}>
-                                {c}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
+                      <button onClick={()=>setOpenDate(null)}
+                        style={{ marginTop:6,background:"none",border:"none",color:t.subDim,fontSize:11,cursor:"pointer",fontFamily:"inherit",padding:0 }}>
+                        キャンセル
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1607,7 +1634,6 @@ export default function TodoApp() {
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [showMealPlan,  setShowMealPlan]  = useState(false);
   const [mealPlan,      setMealPlan]      = useState({});
-  const [mealCandidates,setMealCandidates]= useState([]);
   const [userName,      setUserName]      = useState("");
   const inputRef    = useRef(null);
   const nextId      = useRef(10);
@@ -1662,16 +1688,15 @@ export default function TodoApp() {
   // ── Init: load persisted data + Capacitor setup ────────────────────────────
   useEffect(() => {
     const init = async () => {
-      const [sTheme, sTags, sTodos, sNextId, sSelTag, sChar, sName, sMealPlan, sMealCandidates] = await Promise.all([
-        storage.get("themeId",        "dark"),
-        storage.get("tags",           DEFAULT_TAGS),
-        storage.get("todos",          INITIAL_TODOS),
-        storage.get("nextId",         10),
-        storage.get("selTag",         "personal"),
-        storage.get("characterId",    "cat"),
-        storage.get("userName",       ""),
-        storage.get("mealPlan",       {}),
-        storage.get("mealCandidates", []),
+      const [sTheme, sTags, sTodos, sNextId, sSelTag, sChar, sName, sMealPlan] = await Promise.all([
+        storage.get("themeId",     "dark"),
+        storage.get("tags",        DEFAULT_TAGS),
+        storage.get("todos",       INITIAL_TODOS),
+        storage.get("nextId",      10),
+        storage.get("selTag",      "personal"),
+        storage.get("characterId", "cat"),
+        storage.get("userName",    ""),
+        storage.get("mealPlan",    {}),
       ]);
       setThemeId(sTheme);
       setTags(sTags);
@@ -1681,7 +1706,6 @@ export default function TodoApp() {
       setCharacterId(sChar);
       setUserName(sName);
       setMealPlan(sMealPlan);
-      setMealCandidates(sMealCandidates);
       setLoaded(true);
 
       await requestNotificationPermission();
@@ -1718,8 +1742,7 @@ export default function TodoApp() {
   useEffect(() => { if (loaded) storage.set("selTag",      selectedTag);  }, [selectedTag, loaded]);
   useEffect(() => { if (loaded) storage.set("characterId",    characterId);    }, [characterId,    loaded]);
   useEffect(() => { if (loaded) storage.set("userName",       userName);       }, [userName,       loaded]);
-  useEffect(() => { if (loaded) storage.set("mealPlan",       mealPlan);       }, [mealPlan,       loaded]);
-  useEffect(() => { if (loaded) storage.set("mealCandidates", mealCandidates); }, [mealCandidates, loaded]);
+  useEffect(() => { if (loaded) storage.set("mealPlan", mealPlan); }, [mealPlan, loaded]);
 
   // ── Tag validity guard ────────────────────────────────────────────────────
   useEffect(() => {
@@ -1990,9 +2013,9 @@ export default function TodoApp() {
       {editTodo  && <TodoDetailModal todo={editTodo} todos={todos} tags={tags} onClose={() => setEditTodo(null)} onSave={saveEdit} theme={t}/>}
       {showLocModal && userLoc && <LocationModal lat={userLoc.lat} lng={userLoc.lng} onClose={() => setShowLocModal(false)} theme={t}/>}
       {showRecipe && <RecipeModal todos={todos} onClose={() => setShowRecipe(false)} theme={t}/>}
-      {showSettings && <UserSettingsModal characterId={characterId} userName={userName} onClose={() => setShowSettings(false)} onChange={(char, name) => { setCharacterId(char); setUserName(name); }} theme={t}/>}
+      {showSettings && <UserSettingsModal characterId={characterId} userName={userName} themeId={themeId} onClose={() => setShowSettings(false)} onChange={(char, name) => { setCharacterId(char); setUserName(name); }} onThemeChange={setThemeId} theme={t}/>}
       {showMessages && sync.groupId && <MessagesModal sync={sync} userName={userName} characterId={characterId} onClose={() => setShowMessages(false)} theme={t}/>}
-      {showMealPlan && <MealPlanModal theme={t} onClose={() => setShowMealPlan(false)} mealPlan={mealPlan} onUpdateMealPlan={setMealPlan} mealCandidates={mealCandidates} onUpdateCandidates={setMealCandidates}/>}
+      {showMealPlan && <MealPlanModal theme={t} onClose={() => setShowMealPlan(false)} mealPlan={mealPlan} onUpdateMealPlan={setMealPlan}/>}
       <Assistant todos={todos} onDismiss={() => setNotification(null)} notification={notification}/>
 
       {/* Main content — full width, single column */}
@@ -2031,33 +2054,30 @@ export default function TodoApp() {
               {locLoading ? "⌛" : "🏷️"}<span style={{whiteSpace:"nowrap"}}>周辺お買得情報</span>
             </button>
           </div>
-          {/* Row 2: theme switcher + sync/notice buttons */}
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-              <button onClick={() => setShowSync(true)}
-                title="デバイス間同期"
-                style={{ background: sync.groupId ? "linear-gradient(135deg,#7c6af7,#a78bfa)" : t.chipOff, border:"none", borderRadius:9, color: sync.groupId ? "#fff" : t.sub, padding:"5px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, cursor:"pointer" }}>
-                🔗<span style={{whiteSpace:"nowrap"}}>{sync.groupId ? "同期中" : "同期"}</span>
-              </button>
-              {sync.groupId && (
-                <div style={{ position:"relative" }}>
-                  <button onClick={() => { setShowMessages(true); sync.markAsRead(); }}
-                    title="グループ通知"
-                    style={{ background:sync.unreadCount>0?"linear-gradient(135deg,#f97316,#fb923c)":t.chipOff, border:"none", borderRadius:9, color:sync.unreadCount>0?"#fff":t.sub, padding:"5px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, cursor:"pointer" }}>
-                    🔔<span style={{whiteSpace:"nowrap"}}>通知</span>
-                  </button>
-                  {sync.unreadCount > 0 && (
-                    <span style={{ position:"absolute",top:-5,right:-5,background:"#f87171",color:"#fff",borderRadius:"50%",width:16,height:16,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,pointerEvents:"none" }}>！</span>
-                  )}
-                </div>
-              )}
-              <button onClick={() => setShowMealPlan(true)}
-                title="献立"
-                style={{ background:"linear-gradient(135deg,#f97316,#fbbf24)", border:"none", borderRadius:9, color:"#fff", padding:"5px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, cursor:"pointer", boxShadow:"0 2px 8px rgba(249,115,22,0.3)" }}>
-                🍽️<span style={{whiteSpace:"nowrap"}}>献立</span>
-              </button>
-            </div>
-            <ThemeSwitcher currentThemeId={themeId} onChange={setThemeId} size={22}/>
+          {/* Row 2: sync/chat/meal buttons */}
+          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+            <button onClick={() => setShowSync(true)}
+              title="デバイス間同期"
+              style={{ background: sync.groupId ? "linear-gradient(135deg,#7c6af7,#a78bfa)" : t.chipOff, border:"none", borderRadius:9, color: sync.groupId ? "#fff" : t.sub, padding:"5px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, cursor:"pointer" }}>
+              🔗<span style={{whiteSpace:"nowrap"}}>{sync.groupId ? "同期中" : "同期"}</span>
+            </button>
+            {sync.groupId && (
+              <div style={{ position:"relative" }}>
+                <button onClick={() => { setShowMessages(true); sync.markAsRead(); }}
+                  title="共有チャット"
+                  style={{ background:sync.unreadCount>0?"linear-gradient(135deg,#f97316,#fb923c)":t.chipOff, border:"none", borderRadius:9, color:sync.unreadCount>0?"#fff":t.sub, padding:"5px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, cursor:"pointer" }}>
+                  💬<span style={{whiteSpace:"nowrap"}}>共有チャット</span>
+                </button>
+                {sync.unreadCount > 0 && (
+                  <span style={{ position:"absolute",top:-5,right:-5,background:"#f87171",color:"#fff",borderRadius:"50%",width:16,height:16,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,pointerEvents:"none" }}>！</span>
+                )}
+              </div>
+            )}
+            <button onClick={() => setShowMealPlan(true)}
+              title="献立"
+              style={{ background:"linear-gradient(135deg,#f97316,#fbbf24)", border:"none", borderRadius:9, color:"#fff", padding:"5px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, cursor:"pointer", boxShadow:"0 2px 8px rgba(249,115,22,0.3)" }}>
+              🍽️<span style={{whiteSpace:"nowrap"}}>献立</span>
+            </button>
           </div>
         </div>
 
