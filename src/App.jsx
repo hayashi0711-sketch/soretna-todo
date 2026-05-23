@@ -1270,7 +1270,7 @@ function renderWithLinks(text) {
 }
 
 // ─── MealPlanModal ────────────────────────────────────────────────────────────
-function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan }) {
+function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan, isGroupShared }) {
   const t = theme;
   const [weekOffset, setWeekOffset] = useState(0);
   const [openDate, setOpenDate] = useState(null);
@@ -1372,8 +1372,18 @@ function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan }) {
       <div style={{ background:t.card,borderRadius:20,width:"100%",maxWidth:420,maxHeight:"90vh",boxShadow:"0 24px 64px rgba(0,0,0,0.7)",overflow:"hidden",border:`1px solid ${t.border}`,display:"flex",flexDirection:"column" }} onClick={e=>e.stopPropagation()}>
 
         {/* ヘッダー */}
-        <div style={{ padding:"14px 16px 12px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0 }}>
-          <span style={{ fontSize:14,fontWeight:700,color:t.text }}>🍽️ 今週の献立はそれな！</span>
+        <div style={{ padding:"12px 14px 10px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:"linear-gradient(135deg,rgba(249,115,22,0.08),rgba(251,191,36,0.08))" }}>
+          <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+            <span style={{ fontSize:20 }}>🍽️</span>
+            <div>
+              <div style={{ fontSize:13,fontWeight:900,background:"linear-gradient(135deg,#f97316,#fb923c,#f472b6)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",letterSpacing:0.3,lineHeight:1.2 }}>
+                今日の献立それな！✨
+              </div>
+              {isGroupShared && (
+                <div style={{ fontSize:10,color:"#60a5fa",fontWeight:600,marginTop:1 }}>👥 グループで共有中</div>
+              )}
+            </div>
+          </div>
           <button onClick={onClose} style={{ background:t.chipOff,border:"none",borderRadius:8,color:t.sub,padding:6,cursor:"pointer",display:"flex" }}><XIcon/></button>
         </div>
 
@@ -1441,22 +1451,28 @@ function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan }) {
                   {/* 入力エリア */}
                   {isOpen && (
                     <div style={{ marginTop:4,padding:"10px 12px",background:t.card,borderRadius:10,border:`1px solid ${t.border}` }}>
-                      <div style={{ position:"relative",display:"flex",gap:6,alignItems:"center",background:t.inputBg,borderRadius:10,padding:"4px 6px 4px 10px",border:`1px solid ${t.inputBorder}` }}>
-                        <input
-                          autoFocus
-                          readOnly={mealListening}
-                          value={mealListening ? (mealInterim || "") : inputText}
-                          onChange={e=>{ if(!mealListening){ setInputText(e.target.value); inputTextRef.current=e.target.value; } }}
-                          onKeyDown={e=>e.key==="Enter"&&addMeal(dateStr)}
-                          placeholder={mealListening ? "聞いています…" : "献立を入力"}
-                          style={{ flex:1,background:"transparent",border:"none",color:t.text,fontSize:13,padding:"8px 0",fontFamily:"inherit" }}
-                        />
-                        <button onClick={toggleVoice} className={mealListening?"pulse":""}
-                          style={{ background:mealListening?"rgba(248,113,113,0.2)":t.chipOff,border:"none",borderRadius:8,color:mealListening?"#f87171":t.sub,padding:"7px 9px",display:"flex",alignItems:"center",flexShrink:0 }}>
-                          <MicIcon active={mealListening}/>
-                        </button>
+                      <div style={{ display:"flex",gap:6,alignItems:"center" }}>
+                        {/* 入力欄＋マイク（内包してはみ出しを防止） */}
+                        <div style={{ flex:1,display:"flex",alignItems:"center",background:t.inputBg,borderRadius:10,padding:"4px 4px 4px 10px",border:`1px solid ${t.inputBorder}`,minWidth:0,overflow:"hidden" }}>
+                          <input
+                            autoFocus
+                            readOnly={mealListening}
+                            value={mealListening ? (mealInterim || "") : inputText}
+                            onChange={e=>{ if(!mealListening){ setInputText(e.target.value); inputTextRef.current=e.target.value; } }}
+                            onKeyDown={e=>e.key==="Enter"&&addMeal(dateStr)}
+                            placeholder={mealListening ? "聞いています…" : "献立を入力"}
+                            style={{ flex:1,background:"transparent",border:"none",color:t.text,fontSize:13,padding:"7px 0",fontFamily:"inherit",minWidth:0 }}
+                          />
+                          <button onClick={toggleVoice} className={mealListening?"pulse":""}
+                            style={{ background:mealListening?"rgba(248,113,113,0.2)":"transparent",border:"none",borderRadius:7,color:mealListening?"#f87171":t.sub,padding:"6px 7px",display:"flex",alignItems:"center",flexShrink:0 }}>
+                            <MicIcon active={mealListening}/>
+                          </button>
+                        </div>
+                        {/* 決定ボタン：入力欄の外に独立配置 */}
                         <button onClick={()=>addMeal(dateStr)}
-                          style={{ background:"linear-gradient(135deg,#7c6af7,#a78bfa)",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0 }}>決定</button>
+                          style={{ background:"linear-gradient(135deg,#7c6af7,#a78bfa)",color:"#fff",border:"none",borderRadius:8,padding:"9px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0 }}>
+                          決定
+                        </button>
                       </div>
                       <button onClick={()=>setOpenDate(null)}
                         style={{ marginTop:6,background:"none",border:"none",color:t.subDim,fontSize:11,cursor:"pointer",fontFamily:"inherit",padding:0 }}>
@@ -2015,7 +2031,7 @@ export default function TodoApp() {
       {showRecipe && <RecipeModal todos={todos} onClose={() => setShowRecipe(false)} theme={t}/>}
       {showSettings && <UserSettingsModal characterId={characterId} userName={userName} themeId={themeId} onClose={() => setShowSettings(false)} onChange={(char, name) => { setCharacterId(char); setUserName(name); }} onThemeChange={setThemeId} theme={t}/>}
       {showMessages && sync.groupId && <MessagesModal sync={sync} userName={userName} characterId={characterId} onClose={() => setShowMessages(false)} theme={t}/>}
-      {showMealPlan && <MealPlanModal theme={t} onClose={() => setShowMealPlan(false)} mealPlan={mealPlan} onUpdateMealPlan={setMealPlan}/>}
+      {showMealPlan && <MealPlanModal theme={t} onClose={() => setShowMealPlan(false)} mealPlan={sync.groupId ? sync.sharedMealPlan : mealPlan} onUpdateMealPlan={(meals) => { setMealPlan(meals); if (sync.groupId) sync.updateMealPlan(meals); }} isGroupShared={!!sync.groupId}/>}
       <Assistant todos={todos} onDismiss={() => setNotification(null)} notification={notification}/>
 
       {/* Main content — full width, single column */}
@@ -2065,7 +2081,7 @@ export default function TodoApp() {
               <div style={{ position:"relative" }}>
                 <button onClick={() => { setShowMessages(true); sync.markAsRead(); }}
                   title="共有チャット"
-                  style={{ background:sync.unreadCount>0?"linear-gradient(135deg,#f97316,#fb923c)":t.chipOff, border:"none", borderRadius:9, color:sync.unreadCount>0?"#fff":t.sub, padding:"5px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, cursor:"pointer" }}>
+                  style={{ background:sync.unreadCount>0?"linear-gradient(135deg,#f97316,#fb923c)":"linear-gradient(135deg,#60a5fa,#93c5fd)", border:"none", borderRadius:9, color:"#fff", padding:"5px 10px", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4, cursor:"pointer", boxShadow:"0 2px 8px rgba(96,165,250,0.35)" }}>
                   💬<span style={{whiteSpace:"nowrap"}}>共有チャット</span>
                 </button>
                 {sync.unreadCount > 0 && (

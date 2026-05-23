@@ -38,9 +38,11 @@ export function useSync({ todos, setTodos, tags, setTags, sharedFixedTagIds = []
   const [memberCount, setMemberCount] = useState(0);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginError,  setLoginError]  = useState(null);
-  const [messages,     setMessages]     = useState([]);
-  const [lastReadAt,   setLastReadAt]   = useState(0);
-  const [readStatuses, setReadStatuses] = useState({}); // { uid: lastReadAt }
+  const [messages,       setMessages]       = useState([]);
+  const [lastReadAt,     setLastReadAt]     = useState(0);
+  const [readStatuses,   setReadStatuses]   = useState({});
+  const [sharedMealPlan, setSharedMealPlan] = useState({});
+  const lastWrittenMeals = useRef(null);
 
   // ローカルで書いた ID を記録して Firestore からの echo を無視する
   const localWriteIds = useRef(new Set());
@@ -238,6 +240,32 @@ export function useSync({ todos, setTodos, tags, setTags, sharedFixedTagIds = []
     return unsub;
   }, [groupId, user]);
 
+  // ── 献立リアルタイム監視 ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!groupId) { setSharedMealPlan({}); return; }
+    const unsub = onSnapshot(doc(db, 'groups', groupId, 'mealPlan', 'shared'), snap => {
+      if (!snap.exists()) { setSharedMealPlan({}); return; }
+      const incoming = JSON.stringify(snap.data().meals || {});
+      if (incoming === lastWrittenMeals.current) {
+        lastWrittenMeals.current = null;
+        return;
+      }
+      setSharedMealPlan(snap.data().meals || {});
+    });
+    return unsub;
+  }, [groupId]);
+
+  const updateMealPlan = useCallback(async (meals) => {
+    if (!groupId) return;
+    lastWrittenMeals.current = JSON.stringify(meals);
+    try {
+      await setDoc(doc(db, 'groups', groupId, 'mealPlan', 'shared'), { meals, updatedAt: Date.now() });
+    } catch (e) {
+      console.warn('updateMealPlan error:', e);
+      lastWrittenMeals.current = null;
+    }
+  }, [groupId]);
+
   // ── 既読ステータス監視（各ユーザーの lastReadAt） ─────────────────────────
   useEffect(() => {
     if (!groupId || !user) return;
@@ -330,5 +358,6 @@ export function useSync({ todos, setTodos, tags, setTags, sharedFixedTagIds = []
     createGroup, joinGroup, leaveGroup, updateSharedTagIds,
     login, logout,
     messages, unreadCount, sendMessage, markAsRead, readStatuses,
+    sharedMealPlan, updateMealPlan,
   };
 }
