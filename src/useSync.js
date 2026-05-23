@@ -257,6 +257,7 @@ export function useSync({ todos, setTodos, tags, setTags, sharedFixedTagIds = []
 
   const updateMealPlan = useCallback(async (meals) => {
     if (!groupId) return;
+    setSharedMealPlan(meals);
     lastWrittenMeals.current = JSON.stringify(meals);
     try {
       await setDoc(doc(db, 'groups', groupId, 'mealPlan', 'shared'), { meals, updatedAt: Date.now() });
