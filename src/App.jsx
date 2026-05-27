@@ -1277,12 +1277,15 @@ function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan, isGroupShar
   const [inputText, setInputText] = useState("");
   const [mealListening, setMealListening] = useState(false);
   const [mealInterim, setMealInterim] = useState("");
+  const [editingMeal, setEditingMeal] = useState(null);
+  const [editMealText, setEditMealText] = useState("");
+  const editMealInputRef = useRef(null);
   const stopMealVoice = useRef(null);
-  const inputTextRef = useRef("");        // IME確定済みテキストをrefでも保持
-  const inputElRef = useRef(null);        // inputのDOM参照（IME対策）
-  const openDateRef = useRef(null);       // 音声タイ��ー内でopenDateを参照するた���
-  const mealPlanRef = useRef(mealPlan);   // コールバック内でmealPlanを参照するため
-  const voiceSilenceTimer = useRef(null); // 音声無音タイマー
+  const inputTextRef = useRef("");
+  const inputElRef = useRef(null);
+  const openDateRef = useRef(null);
+  const mealPlanRef = useRef(mealPlan);
+  const voiceSilenceTimer = useRef(null);
 
   useEffect(() => { inputTextRef.current = inputText; }, [inputText]);
   useEffect(() => { openDateRef.current = openDate; }, [openDate]);
@@ -1353,6 +1356,24 @@ function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan, isGroupShar
     } else {
       onUpdateMealPlan({ ...mealPlan, [dateStr]: next });
     }
+  };
+
+  const startEditMeal = (dateStr, idx) => {
+    setEditingMeal({ dateStr, idx });
+    setEditMealText(getMeals(dateStr)[idx] || "");
+    setTimeout(() => editMealInputRef.current?.focus(), 50);
+  };
+
+  const saveEditMeal = () => {
+    if (!editingMeal) return;
+    const { dateStr, idx } = editingMeal;
+    const trimmed = editMealText.trim();
+    if (trimmed) {
+      const next = getMeals(dateStr).map((m, i) => i === idx ? trimmed : m);
+      onUpdateMealPlan({ ...mealPlan, [dateStr]: next });
+    }
+    setEditingMeal(null);
+    setEditMealText("");
   };
 
   const openInput = (dateStr) => {
@@ -1485,9 +1506,29 @@ function MealPlanModal({ theme, onClose, mealPlan, onUpdateMealPlan, isGroupShar
                         {meals.map((meal, idx) => (
                           <div key={idx} style={{ display:"flex",alignItems:"center",gap:4,marginBottom:4 }}>
                             <span style={{ fontSize:12,color:t.sub,flexShrink:0 }}>{idx+1}.</span>
-                            <span style={{ fontSize:13,color:t.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{meal}</span>
-                            <button onClick={()=>removeMeal(dateStr, idx)}
-                              style={{ background:"rgba(248,113,113,0.12)",border:"none",borderRadius:5,color:"#f87171",padding:"3px 7px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0 }}>✕</button>
+                            {editingMeal && editingMeal.dateStr === dateStr && editingMeal.idx === idx ? (
+                              <>
+                                <input
+                                  ref={editMealInputRef}
+                                  value={editMealText}
+                                  onChange={e => setEditMealText(e.target.value)}
+                                  onKeyDown={e => { if (e.key === "Enter") saveEditMeal(); if (e.key === "Escape") { setEditingMeal(null); } }}
+                                  style={{ flex:1,background:t.inputBg,border:`1px solid ${t.inputBorder}`,borderRadius:6,padding:"3px 7px",color:t.text,fontSize:13,fontFamily:"inherit",minWidth:0 }}
+                                />
+                                <button onClick={saveEditMeal}
+                                  style={{ background:"rgba(52,211,153,0.18)",border:"none",borderRadius:5,color:"#34d399",padding:"3px 7px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0 }}>✓</button>
+                                <button onClick={() => setEditingMeal(null)}
+                                  style={{ background:t.chipOff,border:"none",borderRadius:5,color:t.sub,padding:"3px 7px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0 }}>✕</button>
+                              </>
+                            ) : (
+                              <>
+                                <span style={{ fontSize:13,color:t.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{meal}</span>
+                                <button onClick={() => startEditMeal(dateStr, idx)}
+                                  style={{ background:"rgba(124,106,247,0.12)",border:"none",borderRadius:5,color:"#a78bfa",padding:"3px 7px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0 }}>✏️</button>
+                                <button onClick={()=>removeMeal(dateStr, idx)}
+                                  style={{ background:"rgba(248,113,113,0.12)",border:"none",borderRadius:5,color:"#f87171",padding:"3px 7px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0 }}>✕</button>
+                              </>
+                            )}
                           </div>
                         ))}
                         {meals.length > 0 && canAdd && !isOpen && (
@@ -1758,7 +1799,7 @@ export default function TodoApp() {
   // ── Init: load persisted data + Capacitor setup ────────────────────────────
   useEffect(() => {
     const init = async () => {
-      const [sTheme, sTags, sTodos, sNextId, sSelTag, sChar, sName, sMealPlan] = await Promise.all([
+      const [sTheme, sTags, sTodos, sNextId, sSelTag, sChar, sName, sMealPlan, sShowDone] = await Promise.all([
         storage.get("themeId",     "dark"),
         storage.get("tags",        DEFAULT_TAGS),
         storage.get("todos",       INITIAL_TODOS),
@@ -1767,15 +1808,27 @@ export default function TodoApp() {
         storage.get("characterId", "cat"),
         storage.get("userName",    ""),
         storage.get("mealPlan",    {}),
+        storage.get("showDone",    true),
       ]);
+
+      // ストック有り（完了済み買物）を7日後に自動削除
+      const sevenDaysAgoTs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      let processedTodos = sTodos.filter(td => {
+        if (td.done && td.tagId === "shopping" && td.completedAt && td.completedAt < sevenDaysAgoTs) {
+          return false;
+        }
+        return true;
+      });
+
       setThemeId(sTheme);
       setTags(sTags);
-      setTodos(sTodos);
+      setTodos(processedTodos);
       nextId.current = sNextId;
       setSelectedTag(sSelTag);
       setCharacterId(sChar);
       setUserName(sName);
       setMealPlan(sMealPlan);
+      setShowDone(sShowDone);
       setLoaded(true);
 
       await requestNotificationPermission();
@@ -1813,6 +1866,7 @@ export default function TodoApp() {
   useEffect(() => { if (loaded) storage.set("characterId",    characterId);    }, [characterId,    loaded]);
   useEffect(() => { if (loaded) storage.set("userName",       userName);       }, [userName,       loaded]);
   useEffect(() => { if (loaded) storage.set("mealPlan", mealPlan); }, [mealPlan, loaded]);
+  useEffect(() => { if (loaded) storage.set("showDone",    showDone);    }, [showDone,    loaded]);
 
   // ── Tag validity guard ────────────────────────────────────────────────────
   useEffect(() => {
@@ -2024,12 +2078,12 @@ export default function TodoApp() {
   };
 
   const isStockView = filter === "stock";
-  const fifteenDaysAgo = Date.now() - 15 * 24 * 60 * 60 * 1000;
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
   const filtered = isStockView
     ? applyViewFilter(todos).filter(td =>
         td.tagId === "stock" ||
-        (td.done && td.tagId === "shopping" && td.completedAt && td.completedAt > fifteenDaysAgo)
+        (td.done && td.tagId === "shopping" && td.completedAt && td.completedAt > sevenDaysAgo)
       )
     : applyViewFilter(todos)
         .filter(td => !td.nextAppearAt || new Date(td.nextAppearAt) <= new Date())
@@ -2285,7 +2339,16 @@ export default function TodoApp() {
                 ) : todo.tagId === "stock" ? (
                   <div style={{ width:28,height:28,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(167,139,250,0.15)",color:"#a78bfa",fontSize:16,fontWeight:700,marginTop:1 }}>📦</div>
                 ) : (
-                  <div style={{ width:28,height:28,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(34,211,238,0.15)",color:"#22d3ee",fontSize:10,fontWeight:700,marginTop:1 }}>✓</div>
+                  <button
+                    onClick={() => {
+                      const updated = { ...todo, done: false, completedAt: null };
+                      setTodos(prev => prev.map(td => td.id === todo.id ? updated : td));
+                      sync.syncAddOrUpdate(updated);
+                    }}
+                    title="チェックを外して買い物フォルダに戻す"
+                    style={{ width:28,height:28,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(34,211,238,0.15)",color:"#22d3ee",fontSize:10,fontWeight:700,marginTop:1,border:"1px solid rgba(34,211,238,0.3)",cursor:"pointer" }}>
+                    ✓
+                  </button>
                 )}
                 <div style={{ flex:1,minWidth:0 }}>
                   <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
@@ -2359,20 +2422,14 @@ export default function TodoApp() {
           <div style={{ position:"relative" }}>
             <select
               value={showDone ? "show" : "hide"}
-              onChange={async e => {
+              onChange={e => {
                 const v = e.target.value;
                 if (v === "show") setShowDone(true);
                 else if (v === "hide") setShowDone(false);
-                else if (v === "delete" && doneCount > 0) {
-                  await haptics.medium();
-                  setTodos(p => p.filter(td => !td.done));
-                  setShowDone(true);
-                }
               }}
               style={{ background:t.inputBg, border:`1px solid ${t.inputBorder}`, borderRadius:10, color:t.text, padding:"8px 36px 8px 14px", fontSize:14, cursor:"pointer", appearance:"none", WebkitAppearance:"none", fontFamily:"inherit" }}>
               <option value="show">完了済みを表示</option>
               <option value="hide">完了済みを非表示</option>
-              {doneCount > 0 && <option value="delete">完了済みを削除（{doneCount}件）</option>}
             </select>
             <span style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", pointerEvents:"none", color:t.sub, fontSize:11 }}>▼</span>
           </div>
